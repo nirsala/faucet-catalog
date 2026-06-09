@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palyam - ניהול מערכת</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body class="admin-page">
+  <aside class="admin-sidebar">
+    <div class="sidebar-header">
+      <img src="/images/palyam-logo.png" class="sidebar-logo" alt="Palyam" style="height:36px">
+      <p>ניהול מערכת</p>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="products">📦 מוצרים</button>
+      <button class="nav-item" data-tab="categories">📁 קטגוריות</button>
+      <button class="nav-item" data-tab="tags">🏷️ תגיות</button>
+      <button class="nav-item" data-tab="dealers">👥 משתמשים</button>
+      <button class="nav-item" data-tab="analytics">📊 סטטיסטיקות</button>
+      <button class="nav-item" data-tab="store-preview">🖥️ תצוגת חנויות</button>
+      <button class="nav-item" data-tab="settings">⚙️ הגדרות</button>
+      <button class="nav-item" data-tab="notifications">🔔 התראות <span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
+    </nav>
+    <button class="nav-item" onclick="manualBackup()">💾 גיבוי ידני</button>
+    <button class="nav-item logout-btn" onclick="logout()">🚪 יציאה</button>
+  </aside>
+
+  <main class="admin-main">
+    <!-- Products Tab -->
+    <div class="tab-content active" id="tab-products">
+      <div class="tab-header">
+        <h1>ניהול מוצרים</h1>
+        <button class="btn btn-primary" onclick="showAddProduct()">+ מוצר חדש</button>
+      </div>
+      <div class="filter-bar">
+        <select id="productCategoryFilter" onchange="loadProducts()">
+          <option value="">כל הקטגוריות</option>
+        </select>
+        <select id="productFinishFilter" onchange="loadProducts()">
+          <option value="">כל הגימורים</option>
+        </select>
+      </div>
+      <div class="data-grid" id="productsGrid"></div>
+    </div>
+
+    <!-- Categories Tab -->
+    <div class="tab-content" id="tab-categories">
+      <div class="tab-header">
+        <h1>ניהול קטגוריות</h1>
+        <button class="btn btn-primary" onclick="showAddCategory()">+ קטגוריה חדשה</button>
+      </div>
+      <div class="data-grid" id="categoriesGrid"></div>
+    </div>
+
+    <!-- Tags Tab -->
+    <div class="tab-content" id="tab-tags">
+      <div class="tab-header">
+        <h1>ניהול תגיות</h1>
+        <button class="btn btn-primary" onclick="showAddTag()">+ תגית חדשה</button>
+      </div>
+      <p style="color:var(--text-light);margin-bottom:1rem">תגיות משמשות לסינון מוצרים בחנות (למשל: גימור, צבע)</p>
+      <div class="data-grid" id="tagsGrid"></div>
+    </div>
+
+    <!-- Dealers Tab -->
+    <div class="tab-content" id="tab-dealers">
+      <div class="tab-header">
+        <h1>ניהול משתמשים</h1>
+        <button class="btn btn-primary" onclick="showAddDealer()">+ משתמש חדש</button>
+      </div>
+      <div class="data-grid" id="dealersGrid"></div>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div class="tab-content" id="tab-analytics">
+      <div class="tab-header">
+        <h1>סטטיסטיקות</h1>
+      </div>
+      <!-- Summary Cards -->
+      <div class="stats-summary" id="statsSummary"></div>
+      <!-- Charts Row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2rem">
+        <div class="chart-card">
+          <h3>לחיצות יומיות (30 ימים אחרונים)</h3>
+          <canvas id="dailyChart" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>מוצרים פופולריים</h3>
+          <canvas id="topProductsChart" height="200"></canvas>
+        </div>
+      </div>
+      <!-- Top Products Table -->
+      <h3 style="font-family:var(--font-display);margin-bottom:1rem">🔥 מוצרים מובילים</h3>
+      <div class="data-grid" id="topProductsGrid" style="margin-bottom:2rem"></div>
+      <!-- Top Stores Table -->
+      <h3 style="font-family:var(--font-display);margin-bottom:1rem">🏪 חנויות מובילות</h3>
+      <div class="data-grid" id="topStoresGrid" style="margin-bottom:2rem"></div>
+      <!-- Cart Statistics -->
+      <h3 style="font-family:var(--font-display);margin-bottom:1rem;margin-top:2rem">🛒 סטטיסטיקות סל קניות</h3>
+      <div class="stats-summary" id="cartStatsSummary" style="margin-bottom:1.5rem"></div>
+      <div class="data-grid" id="cartTopProductsGrid" style="margin-bottom:1.5rem"></div>
+      <div class="data-grid" id="cartByStoreGrid" style="margin-bottom:2rem"></div>
+
+      <!-- Detailed per dealer -->
+      <h3 style="font-family:var(--font-display);margin-bottom:1rem">📋 פירוט לפי חנות</h3>
+      <div class="filter-bar">
+        <select id="analyticsDealer" onchange="loadDetailedAnalytics()">
+          <option value="">כל המשתמשים</option>
+        </select>
+      </div>
+      <div class="data-grid" id="analyticsGrid"></div>
+    </div>
+
+    <!-- Store Preview Tab -->
+    <div class="tab-content" id="tab-store-preview">
+      <div class="tab-header">
+        <h1>תצוגת חנויות</h1>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="storeSearch" placeholder="חיפוש חנות..." oninput="filterStores()" style="padding:0.6rem 1rem;border:1px solid var(--border);font-size:0.85rem;font-family:var(--font-body);min-width:250px">
+      </div>
+      <div class="stores-grid" id="storesGrid"></div>
+      <!-- Selected store preview -->
+      <div id="selectedStoreSection" style="display:none;margin-top:2rem;border-top:1px solid var(--border);padding-top:2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <h3 id="selectedStoreName" style="font-family:var(--font-display)"></h3>
+          <div style="display:flex;gap:0.5rem">
+            <a id="selectedStoreLink" href="#" target="_blank" class="btn btn-primary btn-sm">פתח בחלון חדש</a>
+            <button class="btn btn-secondary btn-sm" onclick="closeStorePreview()">סגור תצוגה</button>
+          </div>
+        </div>
+        <div id="storePreviewFrame"></div>
+        <div id="dealerOrderSection" style="display:none;margin-top:1rem">
+          <h3>שינוי סדר מוצרים</h3>
+          <div id="orderList" class="order-list"></div>
+          <button class="btn btn-primary" onclick="saveOrder()">שמור סדר</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-content" id="tab-settings">
+      <div class="tab-header">
+        <h1>הגדרות</h1>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;max-width:900px">
+        <div class="settings-card">
+          <h3 style="font-family:var(--font-display);margin-bottom:1rem">🎬 סרטון עמוד ראשי</h3>
+          <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:1rem">הסרטון יופיע בעמוד הנחיתה של כל החנויות</p>
+          <div id="currentVideoPreview" style="margin-bottom:1rem"></div>
+          <form onsubmit="uploadLandingVideo(event)">
+            <div class="form-group"><label>העלה סרטון (MP4, WebM)</label><input type="file" id="landingVideoFile" accept="video/mp4,video/webm,video/quicktime" required></div>
+            <button type="submit" class="btn btn-primary">שמור סרטון</button>
+          </form>
+        </div>
+        <div class="settings-card">
+          <h3 style="font-family:var(--font-display);margin-bottom:1rem">✏️ כיתוב עמוד ראשי</h3>
+          <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:1rem">הכיתוב יופיע מתחת ללוגו בעמוד הנחיתה</p>
+          <form onsubmit="saveLandingText(event)">
+            <div class="form-group"><label>כיתוב ראשי</label><input type="text" id="landingHeadline" placeholder="לחץ עליי כדי לראות את המגוון"></div>
+            <div class="form-group"><label>כיתוב משני</label><input type="text" id="landingSubtext" placeholder=""></div>
+            <button type="submit" class="btn btn-primary">שמור כיתוב</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Tab -->
+    <div class="tab-content" id="tab-notifications">
+      <div class="tab-header">
+        <h1>התראות</h1>
+        <button class="btn btn-primary" onclick="markAllRead()">סמן הכל כנקרא</button>
+      </div>
+      <div id="notificationsGrid"></div>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle"></h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    let user;
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch { user = {}; }
+    if (!token || user.role !== 'admin') { window.location.href = '/'; }
+
+    let categories = [];
+    let products = [];
+    let dealers = [];
+    let finishes = [];
+    let tags = [];
+
+    const api = async (url, opts = {}) => {
+      const res = await fetch(url, {
+        ...opts,
+        headers: { ...opts.headers, ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), Authorization: `Bearer ${token}` }
+      });
+      if (res.status === 401) { logout(); return; }
+      return res.json();
+    };
+
+    // Tabs
+    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        if (btn.dataset.tab === 'notifications') loadNotifications();
+        if (btn.dataset.tab === 'analytics') loadAnalytics();
+        if (btn.dataset.tab === 'settings') loadSettings();
+        if (btn.dataset.tab === 'store-preview') renderStoresGrid();
+      });
+    });
+
+    function logout() { localStorage.clear(); window.location.href = '/'; }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+    function showModal(title, bodyHtml) {
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalBody').innerHTML = bodyHtml;
+      document.getElementById('modal').style.display = 'flex';
+    }
+
+    // ===== CATEGORIES =====
+    async function loadCategories() {
+      categories = await api('/api/categories');
+      document.getElementById('categoriesGrid').innerHTML = `<table class="data-table">
+        <thead><tr><th>שם</th><th>סדר</th><th>פעולות</th></tr></thead>
+        <tbody>${categories.map(c => `<tr>
+          <td>${c.name}</td><td>${c.display_order}</td>
+          <td>
+            <button class="btn btn-sm" onclick="editCategory('${c.id}', '${c.name}')">ערוך</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCategory('${c.id}')">מחק</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+      ['productCategoryFilter'].forEach(id => {
+        const sel = document.getElementById(id);
+        const val = sel.value;
+        sel.innerHTML = '<option value="">כל הקטגוריות</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        sel.value = val;
+      });
+    }
+
+    function showAddCategory() {
+      showModal('קטגוריה חדשה', `<form onsubmit="addCategory(event)">
+        <div class="form-group"><label>שם הקטגוריה</label><input type="text" id="newCatName" required></div>
+        <button type="submit" class="btn btn-primary">הוסף</button></form>`);
+    }
+    async function addCategory(e) { e.preventDefault(); await api('/api/categories', { method: 'POST', body: JSON.stringify({ name: document.getElementById('newCatName').value }) }); closeModal(); loadCategories(); }
+    function editCategory(id, name) {
+      showModal('עריכת קטגוריה', `<form onsubmit="updateCategory(event, '${id}')">
+        <div class="form-group"><label>שם</label><input type="text" id="editCatName" value="${name}" required></div>
+        <button type="submit" class="btn btn-primary">שמור</button></form>`);
+    }
+    async function updateCategory(e, id) { e.preventDefault(); await api(`/api/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name: document.getElementById('editCatName').value }) }); closeModal(); loadCategories(); }
+    async function deleteCategory(id) { if (!confirm('למחוק קטגוריה זו?')) return; const r = await api(`/api/categories/${id}`, { method: 'DELETE' }); if (r.error) alert(r.error); loadCategories(); }
+
+    // ===== PRODUCTS =====
+    async function loadFinishes() {
+      finishes = await api('/api/finishes');
+      const sel = document.getElementById('productFinishFilter');
+      const val = sel.value;
+      sel.innerHTML = '<option value="">כל הגימורים</option>' + finishes.map(f => `<option value="${f}">${f}</option>`).join('');
+      sel.value = val;
+    }
+
+    async function loadProducts() {
+      const catFilter = document.getElementById('productCategoryFilter').value;
+      const finFilter = document.getElementById('productFinishFilter').value;
+      let url = '/api/products?';
+      if (catFilter) url += `category_id=${catFilter}&`;
+      if (finFilter) url += `finish=${encodeURIComponent(finFilter)}&`;
+      products = await api(url);
+      document.getElementById('productsGrid').innerHTML = `<table class="data-table">
+        <thead><tr><th>תמונה</th><th>שם</th><th>קטגוריה</th><th>גימור</th><th>מחיר</th><th>מק"ט</th><th>תמונות</th><th>פעולות</th></tr></thead>
+        <tbody>${products.map(p => `<tr>
+          <td><img src="${p.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+          <td>${p.name}</td>
+          <td>${p.category_name}</td>
+          <td>${p.finish || '-'}</td>
+          <td>₪${p.base_price}</td>
+          <td>${p.sku || '-'}</td>
+          <td>${(p.images?.length || 0) + (p.image_path ? 1 : 0)}</td>
+          <td>
+            <button class="btn btn-sm" onclick="editProduct('${p.id}')">ערוך</button>
+            <button class="btn btn-sm" onclick="manageImages('${p.id}')">תמונות</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">מחק</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function showAddProduct() {
+      showModal('מוצר חדש', `<form onsubmit="addProduct(event)" enctype="multipart/form-data">
+        <div class="form-group"><label>שם המוצר</label><input type="text" id="pName" required></div>
+        <div class="form-group"><label>תיאור</label><textarea id="pDesc" rows="3"></textarea></div>
+        <div class="form-group"><label>קטגוריה</label><select id="pCat" required>${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>מחיר בסיס (₪)</label><input type="number" id="pPrice" step="0.01" required></div>
+        <div class="form-group"><label>מק"ט</label><input type="text" id="pSku"></div>
+        <div class="form-group"><label>תגית (גימור)</label><select id="pFinish"><option value="">ללא תגית</option>${tags.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>תמונות (ניתן לבחור מספר)</label><input type="file" id="pImages" accept="image/*" multiple></div>
+        <button type="submit" class="btn btn-primary">הוסף</button></form>`);
+    }
+
+    async function addProduct(e) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('name', document.getElementById('pName').value);
+      fd.append('description', document.getElementById('pDesc').value);
+      fd.append('category_id', document.getElementById('pCat').value);
+      fd.append('base_price', document.getElementById('pPrice').value);
+      fd.append('sku', document.getElementById('pSku').value);
+      fd.append('finish', document.getElementById('pFinish').value);
+      const files = document.getElementById('pImages').files;
+      for (let i = 0; i < files.length; i++) fd.append('images', files[i]);
+      await fetch('/api/products', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      closeModal(); loadProducts(); loadFinishes();
+    }
+
+    function editProduct(id) {
+      const p = products.find(x => x.id === id);
+      showModal('עריכת מוצר', `<form onsubmit="updateProduct(event, '${id}')">
+        <div class="form-group"><label>שם</label><input type="text" id="epName" value="${p.name}" required></div>
+        <div class="form-group"><label>תיאור</label><textarea id="epDesc" rows="3">${p.description || ''}</textarea></div>
+        <div class="form-group"><label>קטגוריה</label><select id="epCat">${categories.map(c => `<option value="${c.id}" ${c.id === p.category_id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>מחיר (₪)</label><input type="number" id="epPrice" step="0.01" value="${p.base_price}"></div>
+        <div class="form-group"><label>מק"ט</label><input type="text" id="epSku" value="${p.sku || ''}"></div>
+        <div class="form-group"><label>תגית (גימור)</label><select id="epFinish"><option value="">ללא תגית</option>${tags.map(t => `<option value="${t.name}" ${t.name === p.finish ? 'selected' : ''}>${t.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>תמונות חדשות</label><input type="file" id="epImages" accept="image/*" multiple></div>
+        ${p.image_path ? `<img src="${p.image_path}" class="preview-img">` : ''}
+        <button type="submit" class="btn btn-primary">שמור</button></form>`);
+    }
+
+    async function updateProduct(e, id) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('name', document.getElementById('epName').value);
+      fd.append('description', document.getElementById('epDesc').value);
+      fd.append('category_id', document.getElementById('epCat').value);
+      fd.append('base_price', document.getElementById('epPrice').value);
+      fd.append('sku', document.getElementById('epSku').value);
+      fd.append('finish', document.getElementById('epFinish').value);
+      const files = document.getElementById('epImages').files;
+      for (let i = 0; i < files.length; i++) fd.append('images', files[i]);
+      await fetch(`/api/products/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      closeModal(); loadProducts(); loadFinishes();
+    }
+
+    async function deleteProduct(id) { if (!confirm('למחוק מוצר זה?')) return; await api(`/api/products/${id}`, { method: 'DELETE' }); loadProducts(); }
+
+    // ===== PRODUCT IMAGES MANAGEMENT =====
+    async function manageImages(productId) {
+      const images = await api(`/api/products/${productId}/images`);
+      const p = products.find(x => x.id === productId);
+      showModal(`תמונות - ${p.name}`, `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.8rem;margin-bottom:1rem">
+          ${images.map(img => `<div style="position:relative">
+            <img src="${img.image_path}" style="width:100%;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+            ${img.id !== 'main' ? `<button class="btn btn-sm btn-danger" style="position:absolute;top:4px;left:4px;padding:0.1rem 0.4rem" onclick="deleteImage('${img.id}','${productId}')">✕</button>` : '<span style="position:absolute;top:4px;right:4px;background:var(--primary);color:#fff;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.7rem">ראשית</span>'}
+          </div>`).join('')}
+        </div>
+        <form onsubmit="addImages(event, '${productId}')">
+          <div class="form-group"><label>הוסף תמונות</label><input type="file" id="newImages" accept="image/*" multiple required></div>
+          <button type="submit" class="btn btn-primary">העלה</button>
+        </form>`);
+    }
+
+    async function addImages(e, productId) {
+      e.preventDefault();
+      const fd = new FormData();
+      const files = document.getElementById('newImages').files;
+      for (let i = 0; i < files.length; i++) fd.append('images', files[i]);
+      await fetch(`/api/products/${productId}/images`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      manageImages(productId); loadProducts();
+    }
+
+    async function deleteImage(imageId, productId) {
+      if (!confirm('למחוק תמונה?')) return;
+      await api(`/api/product-images/${imageId}`, { method: 'DELETE' });
+      manageImages(productId); loadProducts();
+    }
+
+    // ===== DEALERS =====
+    async function loadDealers() {
+      dealers = await api('/api/dealers');
+      document.getElementById('dealersGrid').innerHTML = `<table class="data-table">
+        <thead><tr><th>לוגו</th><th>שם</th><th>משתמש</th><th>קישור</th><th>סטטוס</th><th>פעולות</th></tr></thead>
+        <tbody>${dealers.map(d => `<tr>
+          <td>${d.logo_path ? `<img src="${d.logo_path}" class="thumb">` : '-'}</td>
+          <td>${d.display_name}</td>
+          <td>${d.username}</td>
+          <td><a href="/store/${d.store_slug}" target="_blank" class="store-link">/store/${d.store_slug}</a> <button class="btn btn-sm" onclick="copyStoreLink('${d.store_slug}')" title="העתק קישור">📋</button></td>
+          <td><span class="badge ${d.is_active ? 'badge-green' : 'badge-red'}">${d.is_active ? 'פעיל' : 'לא פעיל'}</span></td>
+          <td>
+            <button class="btn btn-sm" onclick="editDealer('${d.id}')">ערוך</button>
+            <button class="btn btn-sm" onclick="uploadDealerLogo('${d.id}')">לוגו</button>
+            <button class="btn btn-sm" onclick="managePrices('${d.id}', '${d.display_name}')">מחירים</button>
+            <button class="btn btn-sm" onclick="exportPrices('${d.id}')">📥 ייצוא</button>
+            <button class="btn btn-sm ${d.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleDealer('${d.id}', ${d.is_active})">${d.is_active ? 'השבת' : 'הפעל'}</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+      document.getElementById('analyticsDealer').innerHTML = '<option value="">כל המשתמשים</option>' +
+        dealers.map(d => `<option value="${d.id}" data-slug="${d.store_slug}">${d.display_name}</option>`).join('');
+      renderStoresGrid();
+    }
+
+    function showAddDealer() {
+      showModal('משתמש חדש', `<form onsubmit="addDealer(event)">
+        <div class="form-group"><label>שם משתמש (אנגלית)</label><input type="text" id="dUsername" required pattern="[a-zA-Z0-9_-]+"></div>
+        <div class="form-group"><label>סיסמה</label><input type="password" id="dPassword" required minlength="4"></div>
+        <div class="form-group"><label>שם תצוגה</label><input type="text" id="dDisplayName" required></div>
+        <button type="submit" class="btn btn-primary">הוסף</button></form>`);
+    }
+    async function addDealer(e) {
+      e.preventDefault();
+      const r = await api('/api/dealers', { method: 'POST', body: JSON.stringify({ username: document.getElementById('dUsername').value, password: document.getElementById('dPassword').value, display_name: document.getElementById('dDisplayName').value }) });
+      if (r.error) { alert(r.error); return; }
+      closeModal(); loadDealers();
+    }
+
+    function editDealer(id) {
+      const d = dealers.find(x => x.id === id);
+      showModal('עריכת משתמש', `<form onsubmit="updateDealer(event, '${id}')">
+        <div class="form-group"><label>שם תצוגה</label><input type="text" id="edName" value="${d.display_name}" required></div>
+        <div class="form-group"><label>סיסמה חדשה (ריק = ללא שינוי)</label><input type="password" id="edPass"></div>
+        <button type="submit" class="btn btn-primary">שמור</button></form>`);
+    }
+    async function updateDealer(e, id) {
+      e.preventDefault();
+      const body = { display_name: document.getElementById('edName').value };
+      const pass = document.getElementById('edPass').value;
+      if (pass) body.password = pass;
+      await api(`/api/dealers/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      closeModal(); loadDealers();
+    }
+    async function toggleDealer(id, current) { await api(`/api/dealers/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: !current }) }); loadDealers(); }
+
+    function uploadDealerLogo(dealerId) {
+      showModal('העלאת לוגו', `<form onsubmit="saveDealerLogo(event, '${dealerId}')">
+        <div class="form-group"><label>לוגו</label><input type="file" id="dealerLogoFile" accept="image/*" required></div>
+        <button type="submit" class="btn btn-primary">העלה</button></form>`);
+    }
+    async function saveDealerLogo(e, dealerId) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('logo', document.getElementById('dealerLogoFile').files[0]);
+      await fetch(`/api/dealers/${dealerId}/logo`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      closeModal(); loadDealers();
+    }
+
+    async function managePrices(dealerId, dealerName) {
+      const [allProds, dealerPrices] = await Promise.all([api('/api/products'), api(`/api/dealer-prices/${dealerId}`)]);
+      const priceMap = {};
+      dealerPrices.forEach(dp => priceMap[dp.product_id] = dp.price);
+      showModal(`מחירי ${dealerName}`, `<form onsubmit="saveDealerPrices(event, '${dealerId}')">
+        <div class="bulk-price-bar">
+          <label>עדכון גורף:</label>
+          <select id="adminBulkMode"><option value="fixed">סכום קבוע (₪)</option><option value="percent">אחוזים (%)</option></select>
+          <input type="number" id="adminBulkValue" step="0.01" placeholder="ערך">
+          <button type="button" class="btn btn-accent btn-sm" onclick="adminApplyBulk()">החל</button>
+        </div>
+        <table class="data-table compact">
+          <thead><tr><th>מוצר</th><th>גימור</th><th>מחיר בסיס</th><th>מחיר משתמש</th></tr></thead>
+          <tbody>${allProds.map(p => `<tr>
+            <td>${p.name}</td><td>${p.finish || '-'}</td><td>₪${p.base_price}</td>
+            <td><input type="number" step="0.01" class="price-input" data-pid="${p.id}" value="${priceMap[p.id] ?? ''}" placeholder="${p.base_price}"></td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem">שמור מחירים</button></form>`);
+    }
+    async function saveDealerPrices(e, dealerId) {
+      e.preventDefault();
+      const prices = [];
+      document.querySelectorAll('.price-input').forEach(inp => { if (inp.value) prices.push({ product_id: inp.dataset.pid, price: parseFloat(inp.value) }); });
+      await api('/api/dealer-prices/bulk', { method: 'POST', body: JSON.stringify({ dealer_id: dealerId, prices }) });
+      closeModal(); alert('המחירים נשמרו');
+    }
+
+    function adminApplyBulk() {
+      const mode = document.getElementById('adminBulkMode').value;
+      const val = parseFloat(document.getElementById('adminBulkValue').value);
+      if (isNaN(val) || val === 0) { alert('הזן ערך תקין'); return; }
+      document.querySelectorAll('.price-input').forEach(inp => {
+        const base = parseFloat(inp.placeholder);
+        if (mode === 'fixed') inp.value = (base + val).toFixed(2);
+        else inp.value = (base * (1 + val / 100)).toFixed(2);
+      });
+    }
+
+    // ===== EXCEL EXPORT =====
+    function exportPrices(dealerId) {
+      window.open(`/api/export/${dealerId}?token=${token}`, '_blank');
+    }
+    // Override export to use header auth
+    async function exportPricesDownload(dealerId) {
+      const res = await fetch(`/api/export/${dealerId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'prices.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    // Replace exportPrices with download version
+    window.exportPrices = exportPricesDownload;
+
+    // ===== ANALYTICS =====
+    let dailyChartInstance = null;
+    let topProductsChartInstance = null;
+
+    async function loadAnalytics() {
+      let summary, daily, topProducts, topStores, cartSummary, cartTopProducts, cartByStore;
+      try {
+        [summary, daily, topProducts, topStores, cartSummary, cartTopProducts, cartByStore] = await Promise.all([
+          api('/api/clicks/summary'),
+          api('/api/clicks/daily?days=30'),
+          api('/api/clicks/top-products?limit=10'),
+          api('/api/clicks/top-stores'),
+          api('/api/cart-events/summary'),
+          api('/api/cart-events/top-products?limit=10'),
+          api('/api/cart-events/by-store')
+        ]);
+      } catch (e) { console.error('Analytics load error:', e); return; }
+      summary = summary || {}; daily = daily || []; topProducts = topProducts || [];
+      topStores = topStores || []; cartSummary = cartSummary || {}; cartTopProducts = cartTopProducts || []; cartByStore = cartByStore || [];
+
+      // Summary cards
+      document.getElementById('statsSummary').innerHTML = `
+        <div class="stat-card"><div class="stat-number">${summary.total}</div><div class="stat-label">סה"כ לחיצות</div></div>
+        <div class="stat-card"><div class="stat-number">${summary.today}</div><div class="stat-label">היום</div></div>
+        <div class="stat-card"><div class="stat-number">${summary.this_week}</div><div class="stat-label">השבוע</div></div>
+        <div class="stat-card"><div class="stat-number">${summary.unique_products}</div><div class="stat-label">מוצרים שנלחצו</div></div>
+        <div class="stat-card"><div class="stat-number">${summary.unique_stores}</div><div class="stat-label">חנויות פעילות</div></div>
+      `;
+
+      // Daily chart
+      if (dailyChartInstance) dailyChartInstance.destroy();
+      const ctx1 = document.getElementById('dailyChart').getContext('2d');
+      dailyChartInstance = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels: daily.map(d => d.date.slice(5)),
+          datasets: [{
+            label: 'לחיצות',
+            data: daily.map(d => d.clicks),
+            borderColor: '#b8977e',
+            backgroundColor: 'rgba(184,151,126,0.1)',
+            fill: true, tension: 0.4, pointRadius: 3
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      // Top products chart
+      if (topProductsChartInstance) topProductsChartInstance.destroy();
+      const ctx2 = document.getElementById('topProductsChart').getContext('2d');
+      topProductsChartInstance = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: topProducts.slice(0, 8).map(p => p.name.substring(0, 20)),
+          datasets: [{
+            label: 'לחיצות',
+            data: topProducts.slice(0, 8).map(p => p.click_count),
+            backgroundColor: '#1a1a1a',
+            borderRadius: 2
+          }]
+        },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+      });
+
+      // Top products table
+      document.getElementById('topProductsGrid').innerHTML = topProducts.length === 0 ? '<p class="empty-state">אין נתונים עדיין</p>' :
+        `<table class="data-table">
+          <thead><tr><th>תמונה</th><th>שם מוצר</th><th>מק"ט</th><th>קטגוריה</th><th>גימור</th><th>לחיצות</th><th>אחרונה</th></tr></thead>
+          <tbody>${topProducts.map(p => `<tr>
+            <td><img src="${p.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.sku || '-'}</td>
+            <td>${p.category_name}</td>
+            <td>${p.finish || '-'}</td>
+            <td><strong style="font-size:1.1rem">${p.click_count}</strong></td>
+            <td>${new Date(p.last_clicked + 'Z').toLocaleString('he-IL')}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+
+      // Top stores table
+      document.getElementById('topStoresGrid').innerHTML = topStores.length === 0 ? '<p class="empty-state">אין נתונים עדיין</p>' :
+        `<table class="data-table">
+          <thead><tr><th>לוגו</th><th>חנות</th><th>לחיצות</th><th>מוצרים שנצפו</th><th>פעילות אחרונה</th></tr></thead>
+          <tbody>${topStores.map(s => `<tr>
+            <td>${s.logo_path ? `<img src="${s.logo_path}" class="thumb">` : '-'}</td>
+            <td><strong>${s.display_name}</strong></td>
+            <td><strong style="font-size:1.1rem">${s.click_count}</strong></td>
+            <td>${s.unique_products}</td>
+            <td>${s.last_activity ? new Date(s.last_activity + 'Z').toLocaleString('he-IL') : '-'}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+
+      // Cart summary cards
+      document.getElementById('cartStatsSummary').innerHTML = `
+        <div class="stat-card"><div class="stat-number">${cartSummary.total}</div><div class="stat-label">סל נפתח</div></div>
+        <div class="stat-card"><div class="stat-number">${cartSummary.today}</div><div class="stat-label">היום</div></div>
+        <div class="stat-card"><div class="stat-number">${cartSummary.this_week}</div><div class="stat-label">השבוע</div></div>
+        <div class="stat-card"><div class="stat-number">${cartSummary.avg_products}</div><div class="stat-label">ממוצע מוצרים</div></div>
+        <div class="stat-card"><div class="stat-number">${cartSummary.avg_price > 0 ? '₪' + cartSummary.avg_price : '-'}</div><div class="stat-label">ממוצע סכום</div></div>
+      `;
+
+      // Cart top products
+      document.getElementById('cartTopProductsGrid').innerHTML = cartTopProducts.length === 0 ? '' :
+        `<h4 style="font-size:0.85rem;color:var(--text-light);margin-bottom:0.5rem">מוצרים שנוספו הכי הרבה לסל</h4>
+        <table class="data-table compact">
+          <thead><tr><th>תמונה</th><th>מוצר</th><th>מק"ט</th><th>נוסף לסל</th></tr></thead>
+          <tbody>${cartTopProducts.map(p => `<tr>
+            <td><img src="${p.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.sku || '-'}</td>
+            <td><strong>${p.cart_count}</strong> פעמים</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+
+      // Cart by store
+      document.getElementById('cartByStoreGrid').innerHTML = cartByStore.length === 0 ? '' :
+        `<h4 style="font-size:0.85rem;color:var(--text-light);margin-bottom:0.5rem">סלים לפי חנות</h4>
+        <table class="data-table compact">
+          <thead><tr><th>חנות</th><th>סלים נפתחו</th><th>ממוצע מוצרים</th><th>פעילות אחרונה</th></tr></thead>
+          <tbody>${cartByStore.map(s => `<tr>
+            <td><strong>${s.display_name}</strong></td>
+            <td><strong>${s.cart_count}</strong></td>
+            <td>${Math.round(s.avg_products * 10) / 10}</td>
+            <td>${s.last_activity ? new Date(s.last_activity + 'Z').toLocaleString('he-IL') : '-'}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    async function loadDetailedAnalytics() {
+      const dealerId = document.getElementById('analyticsDealer').value;
+      const url = dealerId ? `/api/clicks/stats?dealer_id=${dealerId}` : '/api/clicks/stats';
+      const stats = await api(url);
+      const allProds = await api('/api/products');
+      const prodMap = {}; allProds.forEach(p => prodMap[p.id] = p);
+      const dealerMap = {}; dealers.forEach(d => dealerMap[d.id] = d.display_name);
+      document.getElementById('analyticsGrid').innerHTML = stats.length === 0 ? '<p class="empty-state">אין נתונים עדיין</p>' :
+        `<table class="data-table">
+          <thead><tr><th>תמונה</th><th>מוצר</th><th>מק"ט</th><th>חנות</th><th>לחיצות</th><th>אחרונה</th></tr></thead>
+          <tbody>${stats.map(s => {
+            const prod = prodMap[s.product_id];
+            return `<tr>
+            <td><img src="${prod?.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+            <td>${prod?.name || s.product_id}</td>
+            <td>${prod?.sku || '-'}</td>
+            <td>${dealerMap[s.dealer_id] || '-'}</td>
+            <td><strong>${s.click_count}</strong></td>
+            <td>${new Date(s.last_clicked + 'Z').toLocaleString('he-IL')}</td>
+          </tr>`;}).join('')}</tbody>
+        </table>`;
+    }
+
+    // ===== STORE PREVIEW =====
+    let selectedStoreDealer = null;
+
+    function renderStoresGrid() {
+      const search = (document.getElementById('storeSearch')?.value || '').toLowerCase();
+      const filtered = dealers.filter(d =>
+        !search || d.display_name.toLowerCase().includes(search) || d.username.toLowerCase().includes(search) || d.store_slug.includes(search)
+      );
+      document.getElementById('storesGrid').innerHTML = filtered.length === 0 ? '<p class="empty-state">לא נמצאו חנויות</p>' :
+        `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem">${filtered.map(d => `
+          <div class="store-card ${selectedStoreDealer?.id === d.id ? 'store-card-selected' : ''}" onclick="selectStore('${d.id}')">
+            <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem">
+              ${d.logo_path ? `<img src="${d.logo_path}" style="width:40px;height:40px;object-fit:contain;border-radius:4px">` : '<div style="width:40px;height:40px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:1.2rem">🏪</div>'}
+              <div>
+                <strong>${d.display_name}</strong>
+                <div style="font-size:0.75rem;color:var(--text-muted)">${d.username}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <a href="/store/${d.store_slug}" target="_blank" class="btn btn-sm btn-secondary" onclick="event.stopPropagation()">פתח חנות</a>
+              <button class="btn btn-sm" onclick="event.stopPropagation();copyStoreLink('${d.store_slug}')">📋</button>
+              <span class="badge ${d.is_active ? 'badge-green' : 'badge-red'}" style="margin-right:auto">${d.is_active ? 'פעיל' : 'מושבת'}</span>
+            </div>
+          </div>
+        `).join('')}</div>`;
+    }
+
+    function filterStores() { renderStoresGrid(); }
+
+    async function selectStore(dealerId) {
+      selectedStoreDealer = dealers.find(d => d.id === dealerId);
+      if (!selectedStoreDealer) return;
+      renderStoresGrid();
+      document.getElementById('selectedStoreSection').style.display = 'block';
+      document.getElementById('selectedStoreName').textContent = selectedStoreDealer.display_name;
+      document.getElementById('selectedStoreLink').href = `/store/${selectedStoreDealer.store_slug}`;
+      document.getElementById('storePreviewFrame').innerHTML = `<iframe src="/store/${selectedStoreDealer.store_slug}" class="store-iframe"></iframe>`;
+      document.getElementById('dealerOrderSection').style.display = 'block';
+      const allProds = await api('/api/products');
+      const orderData = await api(`/api/dealer-order/${dealerId}`);
+      const orderMap = {}; orderData.forEach(o => orderMap[o.product_id] = o.display_order);
+      const sorted = allProds.map(p => ({ ...p, customOrder: orderMap[p.id] ?? p.display_order })).sort((a, b) => a.customOrder - b.customOrder);
+      document.getElementById('orderList').innerHTML = sorted.map((p, i) => `
+        <div class="order-item" data-id="${p.id}"><span class="order-handle">☰</span><span>${p.name}</span>
+          <div><button class="btn btn-sm" onclick="moveItem(this, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button class="btn btn-sm" onclick="moveItem(this, 1)" ${i === sorted.length - 1 ? 'disabled' : ''}>▼</button></div>
+        </div>`).join('');
+    }
+
+    function closeStorePreview() {
+      selectedStoreDealer = null;
+      document.getElementById('selectedStoreSection').style.display = 'none';
+      renderStoresGrid();
+    }
+
+    function moveItem(btn, dir) {
+      const item = btn.closest('.order-item');
+      const sibling = dir === -1 ? item.previousElementSibling : item.nextElementSibling;
+      if (!sibling) return;
+      if (dir === -1) item.parentNode.insertBefore(item, sibling);
+      else item.parentNode.insertBefore(sibling, item);
+    }
+    async function saveOrder() {
+      if (!selectedStoreDealer) return;
+      const items = document.querySelectorAll('.order-item');
+      const product_orders = Array.from(items).map((el, i) => ({ product_id: el.dataset.id, order: i }));
+      await api(`/api/dealer-order/${selectedStoreDealer.id}`, { method: 'POST', body: JSON.stringify({ product_orders }) });
+      alert('הסדר נשמר'); selectStore(selectedStoreDealer.id);
+    }
+
+    // ===== NOTIFICATIONS =====
+    async function loadNotifications() {
+      const notifs = await api('/api/notifications');
+      document.getElementById('notificationsGrid').innerHTML = notifs.length === 0 ? '<p class="empty-state">אין התראות</p>' :
+        `<table class="data-table">
+          <thead><tr><th>סוג</th><th>הודעה</th><th>משתמש</th><th>תאריך</th><th>סטטוס</th></tr></thead>
+          <tbody>${notifs.map(n => {
+            let detailsHtml = '';
+            if (n.details && Array.isArray(n.details) && n.details.length > 0) {
+              detailsHtml = `<div style="margin-top:0.5rem">
+                <table class="data-table compact" style="font-size:0.8rem;margin:0">
+                  <thead><tr><th>מוצר</th><th>מחיר מומלץ</th><th>מחיר ישן</th><th>מחיר חדש</th></tr></thead>
+                  <tbody>${n.details.map(d => `<tr>
+                    <td>${d.product_name}</td>
+                    <td>₪${d.base_price}</td>
+                    <td>${d.old_price !== null ? '₪' + d.old_price : '-'}</td>
+                    <td><strong>₪${d.new_price}</strong></td>
+                  </tr>`).join('')}</tbody>
+                </table>
+              </div>`;
+            }
+            return `<tr style="${n.is_read ? '' : 'background:#fff8e1'}">
+              <td>${n.type === 'price_update' ? '💰' : '🔔'}</td>
+              <td>${n.message}${detailsHtml}</td>
+              <td>${n.dealer_name || '-'}</td>
+              <td>${new Date(n.created_at + 'Z').toLocaleString('he-IL')}</td>
+              <td>${n.is_read ? '✓' : '<strong>חדש</strong>'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>`;
+    }
+
+    async function checkNotifCount() {
+      const data = await api('/api/notifications/unread-count');
+      const badge = document.getElementById('notifBadge');
+      if (data.count > 0) { badge.textContent = data.count; badge.style.display = 'inline-flex'; }
+      else { badge.style.display = 'none'; }
+    }
+
+    async function markAllRead() {
+      await api('/api/notifications/mark-read', { method: 'POST' });
+      loadNotifications(); checkNotifCount();
+    }
+
+    // ===== TAGS =====
+    async function loadTags() {
+      tags = await api('/api/tags');
+      document.getElementById('tagsGrid').innerHTML = `<table class="data-table">
+        <thead><tr><th>תגית</th><th>פעולות</th></tr></thead>
+        <tbody>${tags.map(t => `<tr>
+          <td>${t.name}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="deleteTag('${t.id}')">מחק</button></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function showAddTag() {
+      showModal('תגית חדשה', `<form onsubmit="addTag(event)">
+        <div class="form-group"><label>שם התגית</label><input type="text" id="newTagName" required placeholder="למשל: שחור מט"></div>
+        <button type="submit" class="btn btn-primary">הוסף</button></form>`);
+    }
+
+    async function addTag(e) {
+      e.preventDefault();
+      await api('/api/tags', { method: 'POST', body: JSON.stringify({ name: document.getElementById('newTagName').value }) });
+      closeModal(); loadTags(); loadFinishes();
+    }
+
+    async function deleteTag(id) {
+      if (!confirm('למחוק תגית זו?')) return;
+      await api(`/api/tags/${id}`, { method: 'DELETE' });
+      loadTags(); loadFinishes();
+    }
+
+    // ===== COPY STORE LINK =====
+    function copyStoreLink(slug) {
+      const url = `${window.location.origin}/store/${slug}`;
+      navigator.clipboard.writeText(url).then(() => alert('הקישור הועתק!')).catch(() => {
+        prompt('העתק את הקישור:', url);
+      });
+    }
+
+    // ===== SETTINGS =====
+    async function loadSettings() {
+      const settings = await api('/api/settings');
+      if (settings.landing_video) {
+        document.getElementById('currentVideoPreview').innerHTML = `<video src="${settings.landing_video}" style="max-width:100%;max-height:200px;border:1px solid var(--border)" controls muted></video>`;
+      }
+      if (settings.landing_headline) document.getElementById('landingHeadline').value = settings.landing_headline;
+      if (settings.landing_subtext) document.getElementById('landingSubtext').value = settings.landing_subtext;
+    }
+
+    async function uploadLandingVideo(e) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('video', document.getElementById('landingVideoFile').files[0]);
+      const res = await fetch('/api/settings/video', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const data = await res.json();
+      if (data.video_path) {
+        alert('הסרטון הועלה בהצלחה!');
+        loadSettings();
+      }
+    }
+
+    async function saveLandingText(e) {
+      e.preventDefault();
+      await api('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          landing_headline: document.getElementById('landingHeadline').value,
+          landing_subtext: document.getElementById('landingSubtext').value
+        })
+      });
+      alert('הכיתוב נשמר!');
+    }
+
+    // ===== BACKUP =====
+    async function manualBackup() {
+      await api('/api/backup', { method: 'POST' });
+      alert('גיבוי נוצר בהצלחה!');
+    }
+
+    // ===== INIT =====
+    async function init() {
+      await loadCategories();
+      await loadTags();
+      await loadFinishes();
+      await loadProducts();
+      await loadDealers();
+      checkNotifCount();
+      setInterval(checkNotifCount, 30000);
+    }
+    init();
+  </script>
+</body>
+</html>

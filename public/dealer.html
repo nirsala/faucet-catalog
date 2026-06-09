@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palyam - ניהול מחירים</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body class="admin-page dealer-theme">
+  <aside class="admin-sidebar">
+    <div class="sidebar-header">
+      <img src="/images/palyam-logo.png" class="sidebar-logo" alt="Palyam" style="height:32px">
+      <p id="dealerName"></p>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="my-prices">💰 המחירים שלי</button>
+      <button class="nav-item" data-tab="my-stats">📊 סטטיסטיקות</button>
+      <button class="nav-item" data-tab="my-store">🖥️ החנות שלי</button>
+      <button class="nav-item" data-tab="my-logo">🎨 לוגו וברנדינג</button>
+      <button class="nav-item" data-tab="my-style">🎨 צבע מחיר</button>
+    </nav>
+    <button class="nav-item logout-btn" onclick="logout()">🚪 יציאה</button>
+  </aside>
+
+  <main class="admin-main">
+    <!-- ===== MY PRICES TAB ===== -->
+    <div class="tab-content active" id="tab-my-prices">
+      <div class="tab-header">
+        <h1>ניהול מחירים</h1>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-secondary" onclick="exportMyPrices()">📥 ייצוא לאקסל</button>
+          <button class="btn btn-primary" onclick="saveAllPrices()">שמור הכל</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <select id="dealerCatFilter" onchange="renderPriceTable()">
+          <option value="">כל הקטגוריות</option>
+        </select>
+        <select id="dealerFinishFilter" onchange="renderPriceTable()">
+          <option value="">כל הגימורים</option>
+        </select>
+      </div>
+      <div class="dealer-bulk-bar">
+        <div class="bulk-header">
+          <span class="bulk-icon">⚡</span>
+          <span class="bulk-title">עדכון גורף</span>
+        </div>
+        <div class="bulk-controls">
+          <select id="bulkMode">
+            <option value="fixed">סכום קבוע (₪)</option>
+            <option value="percent">אחוזים (%)</option>
+          </select>
+          <input type="number" id="bulkValue" step="0.01" placeholder="הזן ערך">
+          <button class="btn btn-accent" onclick="applyBulkPrice()">החל על הכל</button>
+          <button class="btn btn-secondary btn-sm" onclick="resetPrices()">אפס</button>
+        </div>
+      </div>
+      <div id="pricesTable"></div>
+    </div>
+
+    <!-- ===== MY STATS TAB ===== -->
+    <div class="tab-content" id="tab-my-stats">
+      <div class="tab-header">
+        <h1>סטטיסטיקות החנות</h1>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <select id="statsPeriod" onchange="loadDealerStats()" class="stats-period-select">
+            <option value="7">7 ימים</option>
+            <option value="30" selected>30 ימים</option>
+            <option value="90">90 ימים</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dealer-stats-grid">
+        <div class="dealer-stat-card">
+          <div class="stat-icon">👁️</div>
+          <div class="stat-number" id="dsTotalClicks">0</div>
+          <div class="stat-label">סה"כ צפיות</div>
+        </div>
+        <div class="dealer-stat-card">
+          <div class="stat-icon">📅</div>
+          <div class="stat-number" id="dsToday">0</div>
+          <div class="stat-label">היום</div>
+        </div>
+        <div class="dealer-stat-card">
+          <div class="stat-icon">📈</div>
+          <div class="stat-number" id="dsWeek">0</div>
+          <div class="stat-label">השבוע</div>
+        </div>
+        <div class="dealer-stat-card">
+          <div class="stat-icon">🗓️</div>
+          <div class="stat-number" id="dsMonth">0</div>
+          <div class="stat-label">החודש</div>
+        </div>
+        <div class="dealer-stat-card">
+          <div class="stat-icon">📦</div>
+          <div class="stat-number" id="dsUniqueProducts">0</div>
+          <div class="stat-label">מוצרים שנצפו</div>
+        </div>
+      </div>
+
+      <div class="dealer-charts-row">
+        <div class="dealer-chart-card">
+          <h3>📈 צפיות יומיות</h3>
+          <canvas id="dealerDailyChart"></canvas>
+        </div>
+        <div class="dealer-chart-card">
+          <h3>📊 צפיות לפי קטגוריה</h3>
+          <canvas id="dealerCategoryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="dealer-chart-card" style="margin-top:1.5rem">
+        <h3>🕐 שעות פעילות</h3>
+        <canvas id="dealerHourlyChart"></canvas>
+      </div>
+
+      <div class="dealer-top-products" style="margin-top:2rem">
+        <h3 class="section-heading">🔥 המוצרים הכי פופולריים שלך</h3>
+        <div id="dealerTopProducts"></div>
+      </div>
+    </div>
+
+    <!-- ===== MY STORE TAB ===== -->
+    <div class="tab-content" id="tab-my-store">
+      <div class="tab-header">
+        <h1>החנות שלי</h1>
+        <a id="storeLink" href="#" target="_blank" class="btn btn-primary">פתח בחלון חדש ↗</a>
+      </div>
+      <div class="store-preview-container">
+        <div class="store-preview-frame" id="myStoreFrame">
+          <div class="store-preview-placeholder">
+            <span class="preview-icon">🖥️</span>
+            <p>לחץ לטעינת תצוגה מקדימה</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== LOGO TAB ===== -->
+    <div class="tab-content" id="tab-my-logo">
+      <div class="tab-header">
+        <h1>לוגו וברנדינג</h1>
+      </div>
+      <div class="dealer-card">
+        <div class="dealer-card-header">
+          <span class="card-icon">🎨</span>
+          <h3>הלוגו שלך</h3>
+        </div>
+        <p class="dealer-card-desc">הלוגו יופיע בדף החנות שלך ובמסך הפתיחה</p>
+        <div id="currentLogo" class="logo-preview-area"></div>
+        <form onsubmit="uploadMyLogo(event)" class="logo-upload-form">
+          <div class="form-group"><label>העלה לוגו חדש</label><input type="file" id="myLogoFile" accept="image/*" required></div>
+          <button type="submit" class="btn btn-primary">שמור לוגו</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===== PRICE COLOR TAB ===== -->
+    <div class="tab-content" id="tab-my-style">
+      <div class="tab-header">
+        <h1>צבע מחיר בחנות</h1>
+      </div>
+      <div class="dealer-card">
+        <div class="dealer-card-header">
+          <span class="card-icon">🎨</span>
+          <h3>בחירת צבע</h3>
+        </div>
+        <p class="dealer-card-desc">בחר את הצבע שבו יוצגו המחירים בדף החנות שלך</p>
+        <div class="color-options" id="colorOptions">
+          <button class="color-opt" data-color="#c8a45c" style="background:#c8a45c" title="זהב"></button>
+          <button class="color-opt" data-color="#ff4444" style="background:#ff4444" title="אדום"></button>
+          <button class="color-opt" data-color="#4CAF50" style="background:#4CAF50" title="ירוק"></button>
+          <button class="color-opt" data-color="#2196F3" style="background:#2196F3" title="כחול"></button>
+          <button class="color-opt" data-color="#ff9800" style="background:#ff9800" title="כתום"></button>
+          <button class="color-opt" data-color="#e91e63" style="background:#e91e63" title="ורוד"></button>
+          <button class="color-opt" data-color="#ffffff" style="background:#ffffff;border:1px solid #ccc" title="לבן"></button>
+          <button class="color-opt" data-color="#9c27b0" style="background:#9c27b0" title="סגול"></button>
+        </div>
+        <div class="custom-color-row">
+          <label>צבע מותאם:</label>
+          <input type="color" id="customPriceColor" value="#c8a45c">
+        </div>
+        <div class="price-preview-box">
+          <p class="preview-label">תצוגה מקדימה</p>
+          <p id="pricePreview" class="preview-price" style="color:#c8a45c">₪1,250</p>
+        </div>
+        <button class="btn btn-primary" onclick="savePriceColor()">שמור צבע</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const token = localStorage.getItem('token');
+    let user;
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch { user = {}; }
+    if (!token || user.role !== 'dealer') { window.location.href = '/'; throw new Error('redirect'); }
+
+    document.getElementById('dealerName').textContent = user.display_name;
+
+    let allProducts = [];
+    let myPrices = {};
+    let categories = [];
+    let finishes = [];
+
+    const api = async (url, opts = {}) => {
+      const res = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers } });
+      if (res.status === 401) { logout(); return; }
+      return res.json();
+    };
+
+    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        if (btn.dataset.tab === 'my-stats') loadDealerStats();
+        if (btn.dataset.tab === 'my-store') loadMyStore();
+        if (btn.dataset.tab === 'my-logo') showCurrentLogo();
+      });
+    });
+
+    function logout() { localStorage.clear(); window.location.href = '/'; }
+
+    async function init() {
+      try {
+        [allProducts, categories] = await Promise.all([api('/api/products'), api('/api/categories')]);
+      } catch (e) { console.error('Init load error:', e); return; }
+      if (!allProducts || !categories) return;
+      const pricesArr = await api(`/api/dealer-prices/${user.id}`);
+      if (pricesArr && Array.isArray(pricesArr)) pricesArr.forEach(p => myPrices[p.product_id] = p.price);
+      finishes = [...new Set(allProducts.map(p => p.finish).filter(Boolean))];
+
+      document.getElementById('dealerCatFilter').innerHTML = '<option value="">כל הקטגוריות</option>' +
+        categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('dealerFinishFilter').innerHTML = '<option value="">כל הגימורים</option>' +
+        finishes.map(f => `<option value="${f}">${f}</option>`).join('');
+      document.getElementById('storeLink').href = `/store/${user.store_slug}`;
+      renderPriceTable();
+    }
+
+    function renderPriceTable() {
+      const catFilter = document.getElementById('dealerCatFilter').value;
+      const finFilter = document.getElementById('dealerFinishFilter').value;
+      let filtered = allProducts;
+      if (catFilter) filtered = filtered.filter(p => String(p.category_id) === String(catFilter));
+      if (finFilter) filtered = filtered.filter(p => p.finish === finFilter);
+
+      document.getElementById('pricesTable').innerHTML = `<table class="data-table">
+        <thead><tr><th>תמונה</th><th>מוצר</th><th>קטגוריה</th><th>גימור</th><th>מחיר בסיס</th><th>המחיר שלי</th></tr></thead>
+        <tbody>${filtered.map(p => `<tr>
+          <td><img src="${p.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+          <td><strong>${p.name}</strong></td>
+          <td>${p.category_name}</td>
+          <td>${p.finish || '-'}</td>
+          <td class="base-price">₪${p.base_price}</td>
+          <td><input type="number" step="0.01" class="price-input" data-pid="${p.id}" value="${myPrices[p.id] ?? ''}" placeholder="${p.base_price}"></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function applyBulkPrice() {
+      const mode = document.getElementById('bulkMode').value;
+      const val = parseFloat(document.getElementById('bulkValue').value);
+      if (isNaN(val) || val === 0) { alert('הזן ערך תקין'); return; }
+      document.querySelectorAll('.price-input').forEach(inp => {
+        const basePrice = parseFloat(inp.placeholder);
+        const currentPrice = parseFloat(inp.value) || basePrice;
+        if (mode === 'fixed') {
+          inp.value = (basePrice + val).toFixed(2);
+        } else {
+          inp.value = (basePrice * (1 + val / 100)).toFixed(2);
+        }
+      });
+    }
+
+    function resetPrices() {
+      if (!confirm('לאפס את כל המחירים למחיר הבסיס?')) return;
+      document.querySelectorAll('.price-input').forEach(inp => { inp.value = ''; });
+    }
+
+    async function saveAllPrices() {
+      const prices = [];
+      document.querySelectorAll('.price-input').forEach(inp => {
+        if (inp.value) { prices.push({ product_id: inp.dataset.pid, price: parseFloat(inp.value) }); myPrices[inp.dataset.pid] = parseFloat(inp.value); }
+      });
+      try {
+        const r = await api('/api/dealer-prices/bulk', { method: 'POST', body: JSON.stringify({ prices }) });
+        if (r && r.error) { alert('שגיאה: ' + r.error); return; }
+        alert('המחירים נשמרו בהצלחה!');
+      } catch (e) { alert('שגיאה בשמירת המחירים'); }
+    }
+
+    async function exportMyPrices() {
+      const res = await fetch(`/api/export/${user.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'my-prices.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function loadMyStore() {
+      document.getElementById('myStoreFrame').innerHTML = `<iframe src="/store/${user.store_slug}" class="store-iframe"></iframe>`;
+    }
+
+    function showCurrentLogo() {
+      const el = document.getElementById('currentLogo');
+      el.innerHTML = user.logo_path
+        ? `<img src="${user.logo_path}" class="current-logo-img">`
+        : '<p class="no-logo-msg">לא הועלה לוגו</p>';
+    }
+
+    async function uploadMyLogo(e) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('logo', document.getElementById('myLogoFile').files[0]);
+      const res = await fetch(`/api/dealers/${user.id}/logo`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const data = await res.json();
+      user.logo_path = data.logo_path;
+      localStorage.setItem('user', JSON.stringify(user));
+      alert('הלוגו עודכן!');
+      showCurrentLogo();
+    }
+
+    // Price color - init from user data
+    if (user.price_color) {
+      document.getElementById('customPriceColor').value = user.price_color;
+      document.getElementById('pricePreview').style.color = user.price_color;
+      const matching = document.querySelector(`.color-opt[data-color="${user.price_color}"]`);
+      if (matching) matching.classList.add('selected');
+    }
+    document.querySelectorAll('.color-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const color = btn.dataset.color;
+        document.getElementById('customPriceColor').value = color;
+        document.getElementById('pricePreview').style.color = color;
+        document.querySelectorAll('.color-opt').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+    document.getElementById('customPriceColor').addEventListener('input', (e) => {
+      document.getElementById('pricePreview').style.color = e.target.value;
+      document.querySelectorAll('.color-opt').forEach(b => b.classList.remove('selected'));
+    });
+
+    async function savePriceColor() {
+      const color = document.getElementById('customPriceColor').value;
+      await api(`/api/dealers/${user.id}`, { method: 'PUT', body: JSON.stringify({ price_color: color }) });
+      user.price_color = color;
+      localStorage.setItem('user', JSON.stringify(user));
+      alert('צבע המחיר נשמר!');
+    }
+
+    // ===== DEALER STATS =====
+    let dailyChartInst, categoryChartInst, hourlyChartInst;
+    const chartColors = {
+      accent: '#b8977e',
+      accentLight: 'rgba(184,151,126,0.2)',
+      grid: 'rgba(255,255,255,0.06)',
+      text: 'rgba(255,255,255,0.5)'
+    };
+    const chartDefaults = {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: chartColors.text, font: { size: 10 } }, grid: { color: chartColors.grid } },
+        y: { ticks: { color: chartColors.text, font: { size: 10 } }, grid: { color: chartColors.grid }, beginAtZero: true }
+      }
+    };
+
+    async function loadDealerStats() {
+      const days = document.getElementById('statsPeriod').value;
+      let summary, topProducts, daily, byCategory, hourly;
+      try {
+        [summary, topProducts, daily, byCategory, hourly] = await Promise.all([
+          api('/api/dealer-stats/summary'),
+          api('/api/dealer-stats/top-products?limit=10'),
+          api(`/api/dealer-stats/daily?days=${days}`),
+          api('/api/dealer-stats/by-category'),
+          api('/api/dealer-stats/hourly')
+        ]);
+      } catch (e) { console.error('Stats load error:', e); return; }
+      if (!summary || !topProducts || !daily || !byCategory || !hourly) return;
+
+      // Summary cards
+      document.getElementById('dsTotalClicks').textContent = (summary.total || 0).toLocaleString();
+      document.getElementById('dsToday').textContent = (summary.today || 0).toLocaleString();
+      document.getElementById('dsWeek').textContent = (summary.this_week || 0).toLocaleString();
+      document.getElementById('dsMonth').textContent = (summary.this_month || 0).toLocaleString();
+      document.getElementById('dsUniqueProducts').textContent = (summary.unique_products || 0).toLocaleString();
+
+      // Daily chart
+      if (dailyChartInst) dailyChartInst.destroy();
+      dailyChartInst = new Chart(document.getElementById('dealerDailyChart'), {
+        type: 'line',
+        data: {
+          labels: daily.map(d => d.date.substring(5)),
+          datasets: [{
+            data: daily.map(d => d.clicks),
+            borderColor: chartColors.accent,
+            backgroundColor: chartColors.accentLight,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 3,
+            pointBackgroundColor: chartColors.accent
+          }]
+        },
+        options: chartDefaults
+      });
+
+      // Category chart
+      if (categoryChartInst) categoryChartInst.destroy();
+      const catColors = ['#b8977e', '#d4b896', '#8a6d56', '#c8a45c', '#e8d5b7', '#a08060'];
+      categoryChartInst = new Chart(document.getElementById('dealerCategoryChart'), {
+        type: 'doughnut',
+        data: {
+          labels: byCategory.map(c => c.category_name),
+          datasets: [{
+            data: byCategory.map(c => c.click_count),
+            backgroundColor: catColors.slice(0, byCategory.length),
+            borderColor: '#0d0d0d',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: chartColors.text, font: { size: 11 }, padding: 15 }
+            }
+          }
+        }
+      });
+
+      // Hourly chart
+      if (hourlyChartInst) hourlyChartInst.destroy();
+      const hours24 = Array.from({length: 24}, (_, i) => i);
+      const hourlyData = hours24.map(h => {
+        const found = hourly.find(x => x.hour === h);
+        return found ? found.clicks : 0;
+      });
+      hourlyChartInst = new Chart(document.getElementById('dealerHourlyChart'), {
+        type: 'bar',
+        data: {
+          labels: hours24.map(h => `${h}:00`),
+          datasets: [{
+            data: hourlyData,
+            backgroundColor: chartColors.accentLight,
+            borderColor: chartColors.accent,
+            borderWidth: 1,
+            borderRadius: 3
+          }]
+        },
+        options: chartDefaults
+      });
+
+      // Top products table
+      document.getElementById('dealerTopProducts').innerHTML = topProducts.length === 0
+        ? '<p class="empty-state-dark">אין נתונים עדיין — ברגע שלקוחות יצפו במוצרים, הנתונים יופיעו כאן</p>'
+        : `<table class="data-table">
+          <thead><tr><th>תמונה</th><th>מוצר</th><th>מק"ט</th><th>קטגוריה</th><th>צפיות</th></tr></thead>
+          <tbody>${topProducts.map((p, i) => `<tr>
+            <td><img src="${p.image_path || '/images/placeholder.svg'}" class="thumb" onerror="this.src='/images/placeholder.svg'"></td>
+            <td><strong>${p.name}</strong></td>
+            <td class="sku-cell">${p.sku || '-'}</td>
+            <td>${p.category_name}</td>
+            <td class="click-count">${p.click_count}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+node_modules/
+backups/
+.claude/
+.DS_Store

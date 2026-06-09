@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Palyam - קטלוג מוצרים</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3/dist/JsBarcode.all.min.js"></script>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0d1a2a">
+</head>
+<body class="store-page">
+
+  <!-- ===== VIDEO LANDING SCREEN ===== -->
+  <div class="landing-screen" id="landingScreen">
+    <div class="landing-video-wrap">
+      <video autoplay muted loop playsinline id="landingVideo">
+        <source src="/videos/promo.mp4" type="video/mp4">
+      </video>
+      <div class="landing-video-fallback" id="videoFallback">
+        <div class="water-animation">
+          <div class="drop"></div>
+          <div class="drop"></div>
+          <div class="drop"></div>
+        </div>
+      </div>
+    </div>
+    <div class="landing-overlay">
+      <div class="landing-logo">
+        <img id="landingDealerLogo" src="" alt="" style="display:none">
+        <img src="/images/palyam-logo.png" class="landing-brand-logo" alt="Palyam">
+        <p id="landingDealerName" class="landing-subtitle"></p>
+      </div>
+      <button class="landing-cta" id="landingCta">
+        <span class="cta-icon">👆</span>
+        <span class="cta-text" id="ctaText">לחץ עליי כדי לראות את המגוון</span>
+        <span class="cta-pulse"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== MAIN STORE ===== -->
+  <div class="store-wrapper" id="storeWrapper" style="display:none">
+    <header class="store-header">
+      <div class="store-brand">
+        <img id="headerDealerLogo" src="" alt="" class="header-logo" style="display:none">
+        <div>
+          <img src="/images/palyam-logo.png" alt="Palyam" style="height:28px">
+          <p id="storeName" class="store-subtitle"></p>
+        </div>
+      </div>
+      <div class="store-actions">
+        <button class="compare-toggle" id="compareToggle" style="display:none" onclick="showComparison()">
+          השוואה (<span id="compareCount">0</span>)
+        </button>
+        <button class="cart-toggle" id="cartToggle" onclick="openCart()">
+          🛒 <span class="cart-badge" id="cartBadge" style="display:none">0</span>
+        </button>
+      </div>
+    </header>
+
+    <nav class="category-nav" id="categoryNav"></nav>
+
+    <!-- Finish filter -->
+    <div class="finish-filter" id="finishFilter"></div>
+
+    <main class="store-content" id="storeContent">
+      <div class="loading-spinner" id="loading">
+        <div class="spinner"></div>
+        <p>טוען מוצרים...</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== IMAGE BUBBLE ===== -->
+  <div class="bubble-overlay" id="bubbleOverlay">
+    <div class="bubble" id="bubble">
+      <div class="bubble-gallery">
+        <button class="gallery-arrow gallery-prev" id="galleryPrev">&#10094;</button>
+        <img id="bubbleImg" src="" alt="">
+        <button class="gallery-arrow gallery-next" id="galleryNext">&#10095;</button>
+      </div>
+      <div class="gallery-dots" id="galleryDots"></div>
+      <div class="bubble-info">
+        <h3 id="bubbleName"></h3>
+        <p class="bubble-price" id="bubblePrice"></p>
+        <button class="bubble-add-cart" id="bubbleAddCart" onclick="addToCartFromBubble()">+ הוסף לסל</button>
+      </div>
+      <button class="bubble-close" id="bubbleClose">&times;</button>
+    </div>
+  </div>
+
+  <!-- ===== COMPARISON MODAL ===== -->
+  <div class="comparison-modal" id="comparisonModal" style="display:none">
+    <div class="comparison-header">
+      <h2>השוואת מוצרים</h2>
+      <button class="lightbox-close" onclick="closeComparison()">&times;</button>
+    </div>
+    <div class="comparison-grid" id="comparisonGrid"></div>
+  </div>
+
+  <!-- ===== CART OVERLAY ===== -->
+  <div class="cart-overlay" id="cartOverlay" style="display:none">
+    <div class="cart-container">
+      <div class="cart-header">
+        <div class="cart-header-info">
+          <h2>🛒 סל קניות</h2>
+          <span class="cart-store-name" id="cartStoreName"></span>
+        </div>
+        <button class="cart-close-btn" onclick="closeCart()">&times;</button>
+      </div>
+      <div class="cart-body" id="cartBody"></div>
+      <div class="cart-footer" id="cartFooter">
+        <div class="cart-total-row">
+          <span class="cart-total-label">סה"כ:</span>
+          <span class="cart-total-price" id="cartTotal">₪0</span>
+        </div>
+        <div class="cart-footer-actions">
+          <button class="btn btn-secondary" onclick="clearCart()">🗑️ רוקן סל</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const slug = window.location.pathname.split('/store/')[1];
+    if (!slug) { document.body.innerHTML = '<p style="text-align:center;padding:3rem;color:#999">חנות לא נמצאה</p>'; }
+    let storeData = null;
+    let compareList = [];
+    let currentGallery = [];
+    let currentGalleryIndex = 0;
+    let activeFinish = '';
+    let currentBubbleProductId = null;
+    let cart;
+    try { cart = JSON.parse(localStorage.getItem('palyam_cart_' + slug) || '[]'); } catch { cart = []; }
+    let lastCartLogTime = 0;
+
+    // ===== LANDING SCREEN =====
+    document.getElementById('landingVideo').addEventListener('error', () => {
+      document.getElementById('videoFallback').style.display = 'flex';
+    });
+
+    document.getElementById('landingCta').addEventListener('click', () => {
+      document.getElementById('landingScreen').classList.add('landing-exit');
+      setTimeout(() => {
+        document.getElementById('landingScreen').style.display = 'none';
+        document.getElementById('storeWrapper').style.display = 'block';
+      }, 600);
+    });
+
+    // ===== LOAD STORE =====
+    async function loadStore() {
+      try {
+        const res = await fetch(`/api/store/${slug}`);
+        if (!res.ok) {
+          document.getElementById('loading').innerHTML = '<p class="error-msg">החנות לא נמצאה</p>';
+          return;
+        }
+        storeData = await res.json();
+
+        // Cache for offline
+        if ('caches' in window) {
+          caches.open('store-data').then(cache => {
+            cache.put(`/api/store/${slug}`, new Response(JSON.stringify(storeData)));
+          });
+        }
+
+        document.getElementById('storeName').textContent = storeData.dealer.display_name;
+        document.getElementById('landingDealerName').textContent = storeData.dealer.display_name;
+        document.title = `${storeData.dealer.display_name} - קטלוג ברזים`;
+
+        if (storeData.dealer.price_color) {
+          document.documentElement.style.setProperty('--price-color', storeData.dealer.price_color);
+        }
+
+        if (storeData.dealer.logo_path) {
+          document.getElementById('landingDealerLogo').src = storeData.dealer.logo_path;
+          document.getElementById('landingDealerLogo').style.display = 'block';
+          document.getElementById('headerDealerLogo').src = storeData.dealer.logo_path;
+          document.getElementById('headerDealerLogo').style.display = 'block';
+        }
+
+        // Apply settings
+        if (storeData.settings) {
+          if (storeData.settings.landing_video) {
+            document.getElementById('landingVideo').src = storeData.settings.landing_video;
+          }
+          if (storeData.settings.landing_headline) {
+            document.getElementById('ctaText').textContent = storeData.settings.landing_headline;
+          }
+        }
+
+        renderCategories();
+        renderFinishFilter();
+        renderProducts();
+      } catch (err) {
+        // Try offline cache
+        if ('caches' in window) {
+          const cache = await caches.open('store-data');
+          const cached = await cache.match(`/api/store/${slug}`);
+          if (cached) {
+            storeData = await cached.json();
+            document.getElementById('storeName').textContent = storeData.dealer.display_name + ' (אופליין)';
+            renderCategories();
+            renderFinishFilter();
+            renderProducts();
+            return;
+          }
+        }
+        document.getElementById('loading').innerHTML = '<p class="error-msg">שגיאה בטעינת החנות</p>';
+      }
+    }
+
+    function renderCategories() {
+      const categories = [...new Set(storeData.products.map(p => JSON.stringify({ name: p.category_name, id: p.category_id, order: p.cat_order })))].map(c => JSON.parse(c));
+      categories.sort((a, b) => a.order - b.order);
+
+      const nav = document.getElementById('categoryNav');
+      nav.innerHTML = `<button class="cat-btn active" data-cat="all">הכל</button>` +
+        categories.map(c => `<button class="cat-btn" data-cat="${c.id}">${c.name}</button>`).join('');
+
+      nav.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('cat-btn')) return;
+        nav.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        renderProducts(e.target.dataset.cat);
+      });
+    }
+
+    function renderFinishFilter() {
+      const finishes = [...new Set(storeData.products.map(p => p.finish).filter(Boolean))];
+      if (finishes.length === 0) return;
+      const container = document.getElementById('finishFilter');
+      container.innerHTML = `<span class="finish-label">גימור:</span>
+        <button class="finish-btn active" data-finish="">הכל</button>` +
+        finishes.map(f => `<button class="finish-btn" data-finish="${f}">${f}</button>`).join('');
+
+      container.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('finish-btn')) return;
+        container.querySelectorAll('.finish-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        activeFinish = e.target.dataset.finish;
+        const activeCat = document.querySelector('.cat-btn.active')?.dataset.cat || 'all';
+        renderProducts(activeCat);
+      });
+    }
+
+    function renderProducts(categoryFilter = 'all') {
+      let products = categoryFilter === 'all'
+        ? storeData.products
+        : storeData.products.filter(p => String(p.category_id) === String(categoryFilter));
+
+      if (activeFinish) {
+        products = products.filter(p => p.finish === activeFinish);
+      }
+
+      const grouped = {};
+      for (const p of products) {
+        if (!grouped[p.category_name]) grouped[p.category_name] = [];
+        grouped[p.category_name].push(p);
+      }
+
+      let html = '';
+      if (Object.keys(grouped).length === 0) {
+        html = '<p class="empty-state" style="color:rgba(255,255,255,0.5);text-align:center;padding:3rem;">לא נמצאו מוצרים</p>';
+      }
+      for (const [catName, items] of Object.entries(grouped)) {
+        html += `<section class="product-section">
+          <h2 class="section-title">${catName}</h2>
+          <div class="product-grid">
+            ${items.map(p => {
+              const price = p.dealer_price ?? p.base_price;
+              const imgSrc = p.image_path || '/images/placeholder.svg';
+              const hasMultiple = (p.images && p.images.length > 0) || false;
+              const isCompared = compareList.includes(p.id);
+              return `<div class="product-card ${isCompared ? 'card-compared' : ''}" data-id="${p.id}">
+                <div class="product-image-wrap">
+                  <img src="${imgSrc}" alt="${p.name}" loading="lazy" onerror="this.src='/images/placeholder.svg'">
+                  ${hasMultiple ? '<span class="multi-img-badge">📷 ' + (p.images.length + 1) + '</span>' : ''}
+                </div>
+                <div class="product-info">
+                  <h3 class="product-name">${p.name}</h3>
+                  <p class="product-desc">${p.description || ''}</p>
+                  ${p.finish ? `<span class="product-finish-tag">${p.finish}</span>` : ''}
+                  <p class="product-price">${price > 0 ? '₪' + price.toLocaleString() : 'צרו קשר'}</p>
+                  ${p.sku ? `<span class="product-sku">${p.sku}</span>` : ''}
+                </div>
+                <button class="compare-btn ${isCompared ? 'compared' : ''}" data-id="${p.id}" onclick="event.stopPropagation(); toggleCompare('${p.id}')">
+                  ${isCompared ? '✓ בהשוואה' : '+ השווה'}
+                </button>
+                <button class="add-cart-btn ${cart.some(c => c.id === p.id) ? 'in-cart' : ''}" data-id="${p.id}" onclick="event.stopPropagation(); addToCart('${p.id}')">
+                  ${cart.some(c => c.id === p.id) ? '✓ בסל' : '+ לסל'}
+                </button>
+              </div>`;
+            }).join('')}
+          </div>
+        </section>`;
+      }
+
+      document.getElementById('storeContent').innerHTML = html;
+      document.getElementById('loading').style.display = 'none';
+
+      // Attach click handlers
+      document.querySelectorAll('.product-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.compare-btn') || e.target.closest('.add-cart-btn')) return;
+          openProduct(card);
+        });
+      });
+    }
+
+    // ===== IMAGE BUBBLE =====
+    function openProduct(card) {
+      const id = card.dataset.id;
+      const product = storeData.products.find(p => p.id === id);
+      if (!product) return;
+      currentBubbleProductId = id;
+
+      fetch('/api/clicks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: id, dealer_id: storeData.dealer.id })
+      }).catch(() => {});
+
+      currentGallery = [product.image_path || '/images/placeholder.svg'];
+      if (product.images) {
+        product.images.forEach(img => currentGallery.push(img.image_path));
+      }
+      currentGalleryIndex = 0;
+
+      updateGalleryDisplay();
+      document.getElementById('bubbleName').textContent = product.name;
+      const price = product.dealer_price ?? product.base_price;
+      document.getElementById('bubblePrice').textContent = price > 0 ? '₪' + price.toLocaleString() : 'צרו קשר';
+
+      const prevBtn = document.getElementById('galleryPrev');
+      const nextBtn = document.getElementById('galleryNext');
+      prevBtn.style.display = currentGallery.length <= 1 ? 'none' : 'flex';
+      nextBtn.style.display = currentGallery.length <= 1 ? 'none' : 'flex';
+
+      document.getElementById('bubbleOverlay').classList.add('active');
+    }
+
+    function updateGalleryDisplay() {
+      document.getElementById('bubbleImg').src = currentGallery[currentGalleryIndex];
+      const dotsEl = document.getElementById('galleryDots');
+      if (currentGallery.length > 1) {
+        dotsEl.innerHTML = currentGallery.map((_, i) =>
+          `<span class="gallery-dot ${i === currentGalleryIndex ? 'active' : ''}" onclick="goToGallery(${i})"></span>`
+        ).join('');
+      } else {
+        dotsEl.innerHTML = '';
+      }
+    }
+
+    function goToGallery(index) {
+      currentGalleryIndex = index;
+      updateGalleryDisplay();
+    }
+
+    function closeBubble() {
+      document.getElementById('bubbleOverlay').classList.remove('active');
+    }
+
+    document.getElementById('galleryPrev').addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentGalleryIndex = (currentGalleryIndex - 1 + currentGallery.length) % currentGallery.length;
+      updateGalleryDisplay();
+    });
+
+    document.getElementById('galleryNext').addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentGalleryIndex = (currentGalleryIndex + 1) % currentGallery.length;
+      updateGalleryDisplay();
+    });
+
+    // Swipe support
+    let touchStartX = 0;
+    document.getElementById('bubbleOverlay').addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    document.getElementById('bubbleOverlay').addEventListener('touchend', (e) => {
+      const diff = touchStartX - e.changedTouches[0].screenX;
+      if (currentGallery.length <= 1) return;
+      if (Math.abs(diff) > 50) {
+        currentGalleryIndex = diff > 0
+          ? (currentGalleryIndex + 1) % currentGallery.length
+          : (currentGalleryIndex - 1 + currentGallery.length) % currentGallery.length;
+        updateGalleryDisplay();
+      }
+    }, { passive: true });
+
+    document.getElementById('bubbleClose').addEventListener('click', closeBubble);
+    document.getElementById('bubbleOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeBubble();
+    });
+
+    // ===== COMPARISON =====
+    function toggleCompare(productId) {
+      const idx = compareList.indexOf(productId);
+      if (idx >= 0) {
+        compareList.splice(idx, 1);
+      } else {
+        if (compareList.length >= 4) {
+          alert('ניתן להשוות עד 4 מוצרים');
+          return;
+        }
+        compareList.push(productId);
+      }
+      document.getElementById('compareCount').textContent = compareList.length;
+      document.getElementById('compareToggle').style.display = compareList.length > 0 ? 'flex' : 'none';
+
+      // Update button states
+      document.querySelectorAll('.compare-btn').forEach(btn => {
+        const id = btn.dataset.id;
+        const isIn = compareList.includes(id);
+        btn.classList.toggle('compared', isIn);
+        btn.textContent = isIn ? '✓ בהשוואה' : '+ השווה';
+        btn.closest('.product-card').classList.toggle('card-compared', isIn);
+      });
+    }
+
+    function showComparison() {
+      if (compareList.length < 2) {
+        alert('יש לבחור לפחות 2 מוצרים להשוואה');
+        return;
+      }
+      const products = compareList.map(id => storeData.products.find(p => p.id === id)).filter(Boolean);
+      const grid = document.getElementById('comparisonGrid');
+      grid.innerHTML = products.map(p => {
+        const price = p.dealer_price ?? p.base_price;
+        return `<div class="comparison-card">
+          <img src="${p.image_path || '/images/placeholder.svg'}" alt="${p.name}" onerror="this.src='/images/placeholder.svg'">
+          <h3>${p.name}</h3>
+          <p class="comp-desc">${p.description || ''}</p>
+          <table class="comp-specs">
+            <tr><td>קטגוריה</td><td>${p.category_name}</td></tr>
+            <tr><td>גימור</td><td>${p.finish || '-'}</td></tr>
+            <tr><td>מק"ט</td><td>${p.sku || '-'}</td></tr>
+            <tr><td>מחיר</td><td class="comp-price">${price > 0 ? '₪' + price.toLocaleString() : 'צרו קשר'}</td></tr>
+          </table>
+          <button class="btn btn-sm btn-danger" onclick="toggleCompare('${p.id}'); showComparison();">הסר</button>
+        </div>`;
+      }).join('');
+      document.getElementById('comparisonModal').style.display = 'flex';
+    }
+
+    function closeComparison() {
+      document.getElementById('comparisonModal').style.display = 'none';
+    }
+
+    // ===== SHOPPING CART =====
+    function saveCart() {
+      localStorage.setItem('palyam_cart_' + slug, JSON.stringify(cart));
+      updateCartBadge();
+    }
+
+    function updateCartBadge() {
+      const total = cart.reduce((s, item) => s + item.qty, 0);
+      const badge = document.getElementById('cartBadge');
+      badge.textContent = total;
+      badge.style.display = total > 0 ? 'inline-flex' : 'none';
+    }
+
+    function addToCart(productId) {
+      const existing = cart.find(c => c.id === productId);
+      if (existing) {
+        existing.qty++;
+      } else {
+        cart.push({ id: productId, qty: 1 });
+      }
+      saveCart();
+      // Update button states
+      document.querySelectorAll(`.add-cart-btn[data-id="${productId}"]`).forEach(btn => {
+        btn.classList.add('in-cart');
+        btn.textContent = '✓ בסל';
+      });
+      // Brief animation
+      const toggle = document.getElementById('cartToggle');
+      toggle.classList.add('cart-bounce');
+      setTimeout(() => toggle.classList.remove('cart-bounce'), 400);
+    }
+
+    function addToCartFromBubble() {
+      if (!currentBubbleProductId) return;
+      addToCart(currentBubbleProductId);
+      const btn = document.getElementById('bubbleAddCart');
+      btn.textContent = '✓ נוסף לסל';
+      btn.classList.add('added');
+      setTimeout(() => { btn.textContent = '+ הוסף לסל'; btn.classList.remove('added'); }, 1500);
+    }
+
+    function removeFromCart(productId) {
+      cart = cart.filter(c => c.id !== productId);
+      saveCart();
+      renderCartView();
+      // Update card buttons
+      document.querySelectorAll(`.add-cart-btn[data-id="${productId}"]`).forEach(btn => {
+        btn.classList.remove('in-cart');
+        btn.textContent = '+ לסל';
+      });
+    }
+
+    function updateCartQty(productId, delta) {
+      const item = cart.find(c => c.id === productId);
+      if (!item) return;
+      item.qty += delta;
+      if (item.qty <= 0) { removeFromCart(productId); return; }
+      saveCart();
+      renderCartView();
+    }
+
+    function clearCart() {
+      cart = [];
+      saveCart();
+      renderCartView();
+      document.querySelectorAll('.add-cart-btn').forEach(btn => {
+        btn.classList.remove('in-cart');
+        btn.textContent = '+ לסל';
+      });
+    }
+
+    function openCart() {
+      if (cart.length === 0) {
+        document.getElementById('cartBody').innerHTML = '<div class="cart-empty"><p>🛒</p><p>הסל ריק</p><p class="cart-empty-sub">הוסיפו מוצרים מהקטלוג</p></div>';
+        document.getElementById('cartTotal').textContent = '₪0';
+      } else {
+        renderCartView();
+      }
+      document.getElementById('cartStoreName').textContent = storeData?.dealer?.display_name || '';
+      document.getElementById('cartOverlay').style.display = 'flex';
+
+      // Log cart view event (debounced 30s)
+      const now = Date.now();
+      if (now - lastCartLogTime > 30000 && storeData && cart.length > 0) {
+        lastCartLogTime = now;
+        const totalPrice = cart.reduce((sum, item) => {
+          const p = storeData.products.find(pr => pr.id === item.id);
+          return sum + ((p?.dealer_price ?? p?.base_price ?? 0) * item.qty);
+        }, 0);
+        fetch('/api/cart-events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dealer_id: storeData.dealer.id,
+            product_ids: cart.map(c => c.id),
+            product_count: cart.reduce((s, c) => s + c.qty, 0),
+            total_price: totalPrice
+          })
+        }).catch(() => {});
+      }
+    }
+
+    function closeCart() {
+      document.getElementById('cartOverlay').style.display = 'none';
+    }
+
+    function renderCartView() {
+      if (!storeData) return;
+      let totalPrice = 0;
+      const items = cart.map(item => {
+        const p = storeData.products.find(pr => pr.id === item.id);
+        if (!p) return '';
+        const price = p.dealer_price ?? p.base_price ?? 0;
+        const lineTotal = price * item.qty;
+        totalPrice += lineTotal;
+        const sku = p.sku || p.id.substring(0, 8);
+        return `<div class="cart-item">
+          <img src="${p.image_path || '/images/placeholder.svg'}" class="cart-item-img" onerror="this.src='/images/placeholder.svg'">
+          <div class="cart-item-details">
+            <h4>${p.name}</h4>
+            ${p.finish ? `<span class="cart-item-finish">${p.finish}</span>` : ''}
+            <div class="cart-item-barcode-wrap">
+              <svg class="cart-barcode" data-sku="${sku}"></svg>
+            </div>
+          </div>
+          <div class="cart-item-actions">
+            <div class="cart-qty-control">
+              <button class="cart-qty-btn" onclick="updateCartQty('${p.id}', -1)">−</button>
+              <span class="cart-qty-num">${item.qty}</span>
+              <button class="cart-qty-btn" onclick="updateCartQty('${p.id}', 1)">+</button>
+            </div>
+            <p class="cart-item-price">₪${lineTotal.toLocaleString()}</p>
+            <button class="cart-item-remove" onclick="removeFromCart('${p.id}')">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      document.getElementById('cartBody').innerHTML = items;
+      document.getElementById('cartTotal').textContent = '₪' + totalPrice.toLocaleString();
+
+      // Render barcodes
+      document.querySelectorAll('.cart-barcode').forEach(svg => {
+        try {
+          JsBarcode(svg, svg.dataset.sku, {
+            format: 'CODE128',
+            width: 1.5,
+            height: 45,
+            displayValue: true,
+            fontSize: 11,
+            margin: 5,
+            background: '#ffffff',
+            lineColor: '#000000'
+          });
+        } catch(e) {
+          svg.style.display = 'none';
+        }
+      });
+    }
+
+    // Init cart badge on load
+    updateCartBadge();
+
+    // ===== IDLE RESET (30 min) =====
+    const IDLE_TIMEOUT = 30 * 60 * 1000;
+    let idleTimer = null;
+
+    function resetIdleTimer() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(resetToLanding, IDLE_TIMEOUT);
+    }
+
+    function resetToLanding() {
+      closeBubble();
+      closeComparison();
+      closeCart();
+      cart = [];
+      saveCart();
+      compareList = [];
+      activeFinish = '';
+      document.getElementById('compareCount').textContent = '0';
+      document.getElementById('compareToggle').style.display = 'none';
+
+      // Reset filters
+      const catBtns = document.querySelectorAll('.cat-btn');
+      catBtns.forEach(b => b.classList.remove('active'));
+      if (catBtns[0]) catBtns[0].classList.add('active');
+      const finBtns = document.querySelectorAll('.finish-btn');
+      finBtns.forEach(b => b.classList.remove('active'));
+      if (finBtns[0]) finBtns[0].classList.add('active');
+
+      if (storeData) renderProducts();
+
+      // Back to landing
+      document.getElementById('storeWrapper').style.display = 'none';
+      const landing = document.getElementById('landingScreen');
+      landing.classList.remove('landing-exit');
+      landing.style.display = '';
+      const video = document.getElementById('landingVideo');
+      if (video) { video.currentTime = 0; video.play().catch(() => {}); }
+
+      window.scrollTo(0, 0);
+    }
+
+    ['click', 'touchstart', 'scroll', 'mousemove', 'keydown'].forEach(evt => {
+      document.addEventListener(evt, resetIdleTimer, { passive: true });
+    });
+    resetIdleTimer();
+
+    // ===== SERVICE WORKER =====
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    loadStore();
+  </script>
+</body>
+</html>

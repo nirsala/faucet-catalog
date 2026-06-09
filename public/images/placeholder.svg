@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <rect width="400" height="400" fill="#f0f0f0"/>
+  <path d="M200 120c-8 0-15 3-20 8l-5 5v-3c0-6-4-10-10-10s-10 4-10 10v60c0 6 4 10 10 10s10-4 10-10v-30l15-15c3-3 7-5 10-5s7 2 10 5c3 3 5 7 5 10v35c0 6 4 10 10 10s10-4 10-10v-35c0-8-3-15-8-20l-7-7c-5-5-12-8-20-8z" fill="#ccc" transform="translate(0,20) scale(1.2)"/>
+  <text x="200" y="320" text-anchor="middle" font-family="Arial" font-size="18" fill="#999">תמונת מוצר</text>
+</svg>

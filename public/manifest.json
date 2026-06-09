@@ -1,0 +1,10 @@
+{
+  "name": "T.P.Y קטלוג ברזים",
+  "short_name": "T.P.Y",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1a2a",
+  "theme_color": "#0d1a2a",
+  "orientation": "portrait",
+  "icons": []
+}

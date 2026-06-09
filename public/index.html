@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palyam - כניסה למערכת</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/images/palyam-logo.png" alt="Palyam" style="height:60px;margin-bottom:0.5rem">
+        <p>מערכת ניהול קטלוג ברזים</p>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">שם משתמש</label>
+          <input type="text" id="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">סיסמה</label>
+          <input type="password" id="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">כניסה</button>
+        <p id="loginError" class="error-msg" style="display:none"></p>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('loginError');
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        window.location.href = data.user.role === 'admin' ? '/admin' : '/dealer';
+      } catch (err) {
+        errorEl.textContent = 'שם משתמש או סיסמה שגויים';
+        errorEl.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
