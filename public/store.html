@@ -777,10 +777,26 @@
     });
     resetIdleTimer();
 
-    // ===== SERVICE WORKER =====
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
+    // ===== SERVICE WORKER (force update old versions) =====
+    const APP_VERSION = 2;
+    (async function initSW() {
+      if (!('serviceWorker' in navigator)) return;
+      const savedVer = localStorage.getItem('palyam_app_version');
+      if (savedVer && parseInt(savedVer) < APP_VERSION) {
+        // Force clear everything from old version
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) await r.unregister();
+        const keys = await caches.keys();
+        for (const k of keys) await caches.delete(k);
+        localStorage.setItem('palyam_app_version', APP_VERSION.toString());
+        location.reload();
+        return;
+      }
+      localStorage.setItem('palyam_app_version', APP_VERSION.toString());
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      // Check for updates on every load
+      reg.update().catch(() => {});
+    })();
 
     // ===== ONLINE/OFFLINE INDICATOR =====
     window.addEventListener('online', () => {
