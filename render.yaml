@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: palyam
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: JWT_SECRET
+        value: palyam-prod-secret-2024-secure
+      - key: NODE_ENV
+        value: production
