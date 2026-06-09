@@ -140,11 +140,31 @@
     const DATA_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
 
     // ===== LANDING SCREEN =====
+    const LANDING_KEY = 'palyam_landing_' + slug;
+    const LANDING_DISMISS_DURATION = 10 * 60 * 1000; // 10 minutes
+
     document.getElementById('landingVideo').addEventListener('error', () => {
       document.getElementById('videoFallback').style.display = 'flex';
     });
 
+    // Check if landing was recently dismissed (Xibo may reload the page)
+    (function checkLandingState() {
+      try {
+        const dismissed = localStorage.getItem(LANDING_KEY);
+        if (dismissed && (Date.now() - parseInt(dismissed)) < LANDING_DISMISS_DURATION) {
+          // User dismissed landing less than 10 min ago — skip straight to store
+          document.getElementById('landingScreen').style.display = 'none';
+          document.getElementById('storeWrapper').style.display = 'block';
+          return;
+        }
+      } catch (e) {}
+      // Show landing normally
+      document.getElementById('landingScreen').style.display = '';
+      document.getElementById('storeWrapper').style.display = 'none';
+    })();
+
     document.getElementById('landingCta').addEventListener('click', () => {
+      try { localStorage.setItem(LANDING_KEY, Date.now().toString()); } catch(e) {}
       document.getElementById('landingScreen').classList.add('landing-exit');
       setTimeout(() => {
         document.getElementById('landingScreen').style.display = 'none';
@@ -741,6 +761,8 @@
     }
 
     function resetToLanding() {
+      // Clear the landing dismiss flag so landing shows again
+      try { localStorage.removeItem(LANDING_KEY); } catch(e) {}
       closeBubble();
       closeComparison();
       closeCart();
@@ -777,26 +799,12 @@
     });
     resetIdleTimer();
 
-    // ===== SERVICE WORKER (force update old versions) =====
-    const APP_VERSION = 2;
-    (async function initSW() {
-      if (!('serviceWorker' in navigator)) return;
-      const savedVer = localStorage.getItem('palyam_app_version');
-      if (savedVer && parseInt(savedVer) < APP_VERSION) {
-        // Force clear everything from old version
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for (const r of regs) await r.unregister();
-        const keys = await caches.keys();
-        for (const k of keys) await caches.delete(k);
-        localStorage.setItem('palyam_app_version', APP_VERSION.toString());
-        location.reload();
-        return;
-      }
-      localStorage.setItem('palyam_app_version', APP_VERSION.toString());
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      // Check for updates on every load
-      reg.update().catch(() => {});
-    })();
+    // ===== SERVICE WORKER =====
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.update().catch(() => {});
+      }).catch(() => {});
+    }
 
     // ===== ONLINE/OFFLINE INDICATOR =====
     window.addEventListener('online', () => {
