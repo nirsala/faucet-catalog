@@ -56,6 +56,7 @@
         <button class="cart-toggle" id="cartToggle" onclick="openCart()">
           🛒 <span class="cart-badge" id="cartBadge" style="display:none">0</span>
         </button>
+        <button class="refresh-btn" id="refreshBtn" onclick="refreshAll()" title="רענן נתונים">🔄</button>
       </div>
     </header>
 
@@ -746,6 +747,31 @@
           svg.style.display = 'none';
         }
       });
+    }
+
+    // ===== REFRESH ALL =====
+    async function refreshAll() {
+      const btn = document.getElementById('refreshBtn');
+      btn.classList.add('spinning');
+
+      // Clear cart & comparisons
+      cart = [];
+      saveCart();
+      compareList = [];
+      document.getElementById('compareCount').textContent = '0';
+      document.getElementById('compareToggle').style.display = 'none';
+      document.querySelectorAll('.add-cart-btn').forEach(b => { b.classList.remove('in-cart'); b.textContent = '+ לסל'; });
+      document.querySelectorAll('.compare-btn').forEach(b => { b.classList.remove('compared'); b.textContent = '+ השווה'; });
+      document.querySelectorAll('.product-card').forEach(c => c.classList.remove('card-compared'));
+
+      // Clear cache & fetch fresh
+      try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(CACHE_TIME_KEY); } catch(e) {}
+      closeBubble();
+      closeComparison();
+      closeCart();
+      await loadStore();
+
+      setTimeout(() => btn.classList.remove('spinning'), 600);
     }
 
     // Init cart badge on load
