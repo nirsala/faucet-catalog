@@ -137,7 +137,7 @@
     let isOffline = false;
     const CACHE_KEY = 'palyam_store_' + slug;
     const CACHE_TIME_KEY = 'palyam_store_time_' + slug;
-    const DATA_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    const DATA_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
 
     // ===== LANDING SCREEN =====
     document.getElementById('landingVideo').addEventListener('error', () => {
