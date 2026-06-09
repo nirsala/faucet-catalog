@@ -534,7 +534,80 @@
         </table>`;
     }
 
+    // ===== HOURLY PRICE SYNC CHECK =====
+    let priceCheckInterval = null;
+    const PRICE_CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+    async function checkPriceSync() {
+      const syncStatus = document.getElementById('syncStatus');
+      const syncIcon = document.getElementById('syncIcon');
+      const syncText = document.getElementById('syncText');
+
+      try {
+        // Fetch current store data and dealer prices
+        const [storeData, currentPrices] = await Promise.all([
+          fetch(`/api/store/${user.store_slug}`).then(r => r.json()),
+          api(`/api/dealer-prices/${user.id}`)
+        ]);
+
+        if (!storeData || !storeData.products || !currentPrices) return;
+
+        const priceMap = {};
+        if (Array.isArray(currentPrices)) currentPrices.forEach(p => priceMap[p.product_id] = p.price);
+
+        let total = 0, matched = 0, mismatched = 0;
+        const mismatchList = [];
+
+        for (const [pid, expectedPrice] of Object.entries(priceMap)) {
+          total++;
+          const storeProd = storeData.products.find(sp => sp.id === pid);
+          if (storeProd) {
+            const storePrice = storeProd.dealer_price ?? storeProd.base_price;
+            if (Math.abs(storePrice - expectedPrice) < 0.01) {
+              matched++;
+            } else {
+              mismatched++;
+              mismatchList.push({ name: storeProd.name, expected: expectedPrice, actual: storePrice });
+            }
+          }
+        }
+
+        const now = new Date().toLocaleTimeString('he-IL');
+        syncStatus.style.display = 'flex';
+
+        if (total === 0) {
+          syncIcon.textContent = 'ℹ️';
+          syncText.textContent = `לא הוגדרו מחירים • בדיקה אחרונה ${now}`;
+          syncStatus.className = 'sync-status syncing';
+        } else if (mismatched === 0) {
+          syncIcon.textContent = '✅';
+          syncText.textContent = `${matched} מחירים מסונכרנים באתר המרוחק • ${now}`;
+          syncStatus.className = 'sync-status sync-ok';
+        } else {
+          syncIcon.textContent = '⚠️';
+          syncText.textContent = `${mismatched} מחירים לא מעודכנים באתר! ${matched} תקינים • ${now}`;
+          syncStatus.className = 'sync-status sync-warning';
+          console.warn('Price mismatches:', mismatchList);
+        }
+      } catch (e) {
+        console.error('Price sync check failed:', e);
+        const now = new Date().toLocaleTimeString('he-IL');
+        syncStatus.style.display = 'flex';
+        syncIcon.textContent = '❌';
+        syncText.textContent = `בדיקת סנכרון נכשלה • ${now}`;
+        syncStatus.className = 'sync-status sync-error';
+      }
+    }
+
+    function startPriceCheck() {
+      // Initial check after 5 seconds (let page load first)
+      setTimeout(checkPriceSync, 5000);
+      // Then every hour
+      priceCheckInterval = setInterval(checkPriceSync, PRICE_CHECK_INTERVAL);
+    }
+
     init();
+    startPriceCheck();
   </script>
 </body>
 </html>
