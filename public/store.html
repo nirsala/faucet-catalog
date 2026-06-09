@@ -8,7 +8,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3/dist/JsBarcode.all.min.js"></script>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0d1a2a">
-  <meta http-equiv="refresh" content="300">
 </head>
 <body class="store-page">
 
@@ -135,6 +134,10 @@
     let cart;
     try { cart = JSON.parse(localStorage.getItem('palyam_cart_' + slug) || '[]'); } catch { cart = []; }
     let lastCartLogTime = 0;
+    let isOffline = false;
+    const CACHE_KEY = 'palyam_store_' + slug;
+    const CACHE_TIME_KEY = 'palyam_store_time_' + slug;
+    const DATA_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
     // ===== LANDING SCREEN =====
     document.getElementById('landingVideo').addEventListener('error', () => {
@@ -149,67 +152,183 @@
       }, 600);
     });
 
-    // ===== LOAD STORE =====
+    // ===== LOCAL CACHE HELPERS =====
+    function saveToLocalCache(data) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+      } catch (e) {
+        // localStorage full — try clearing old caches
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('palyam_store_') && key !== CACHE_KEY && key !== CACHE_TIME_KEY) {
+              localStorage.removeItem(key);
+            }
+          }
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+        } catch (e2) { /* give up */ }
+      }
+    }
+
+    function loadFromLocalCache() {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) return JSON.parse(cached);
+      } catch (e) { /* corrupt */ }
+      return null;
+    }
+
+    function getCacheAge() {
+      const t = localStorage.getItem(CACHE_TIME_KEY);
+      return t ? Date.now() - parseInt(t) : Infinity;
+    }
+
+    // ===== PRE-CACHE IMAGES =====
+    function preCacheImages(data) {
+      if (!data || !data.products) return;
+      const urls = [];
+      data.products.forEach(p => {
+        if (p.image_path) urls.push(p.image_path);
+        if (p.images) p.images.forEach(img => { if (img.image_path) urls.push(img.image_path); });
+      });
+      if (data.dealer && data.dealer.logo_path) urls.push(data.dealer.logo_path);
+
+      // Pre-fetch images so browser & SW caches them
+      urls.forEach(url => {
+        const img = new Image();
+        img.src = url;
+      });
+    }
+
+    // ===== APPLY STORE DATA TO UI =====
+    function applyStoreData(offline) {
+      isOffline = offline;
+      const dealerName = storeData.dealer.display_name + (offline ? ' ⚡ אופליין' : '');
+      document.getElementById('storeName').textContent = dealerName;
+      document.getElementById('landingDealerName').textContent = storeData.dealer.display_name;
+      document.title = `${storeData.dealer.display_name} - קטלוג ברזים`;
+
+      if (storeData.dealer.price_color) {
+        document.documentElement.style.setProperty('--price-color', storeData.dealer.price_color);
+      }
+
+      if (storeData.dealer.logo_path) {
+        document.getElementById('landingDealerLogo').src = storeData.dealer.logo_path;
+        document.getElementById('landingDealerLogo').style.display = 'block';
+        document.getElementById('headerDealerLogo').src = storeData.dealer.logo_path;
+        document.getElementById('headerDealerLogo').style.display = 'block';
+      }
+
+      if (storeData.settings) {
+        if (storeData.settings.landing_video) {
+          document.getElementById('landingVideo').src = storeData.settings.landing_video;
+        }
+        if (storeData.settings.landing_headline) {
+          document.getElementById('ctaText').textContent = storeData.settings.landing_headline;
+        }
+      }
+
+      renderCategories();
+      renderFinishFilter();
+      renderProducts();
+    }
+
+    // ===== LOAD STORE (cache-first, then refresh) =====
     async function loadStore() {
+      // 1. Try instant load from localStorage
+      const cached = loadFromLocalCache();
+      if (cached) {
+        storeData = cached;
+        applyStoreData(false);
+        preCacheImages(cached);
+      }
+
+      // 2. Fetch fresh data from server
       try {
         const res = await fetch(`/api/store/${slug}`);
         if (!res.ok) {
-          document.getElementById('loading').innerHTML = '<p class="error-msg">החנות לא נמצאה</p>';
+          if (!cached) {
+            document.getElementById('loading').innerHTML = '<p class="error-msg">החנות לא נמצאה</p>';
+          }
           return;
         }
-        storeData = await res.json();
+        const freshData = await res.json();
 
-        // Cache for offline
+        // Save to localStorage + SW cache
+        saveToLocalCache(freshData);
         if ('caches' in window) {
-          caches.open('store-data').then(cache => {
-            cache.put(`/api/store/${slug}`, new Response(JSON.stringify(storeData)));
+          caches.open('store-data').then(c => {
+            c.put(`/api/store/${slug}`, new Response(JSON.stringify(freshData)));
           });
         }
 
-        document.getElementById('storeName').textContent = storeData.dealer.display_name;
-        document.getElementById('landingDealerName').textContent = storeData.dealer.display_name;
-        document.title = `${storeData.dealer.display_name} - קטלוג ברזים`;
-
-        if (storeData.dealer.price_color) {
-          document.documentElement.style.setProperty('--price-color', storeData.dealer.price_color);
+        // Update UI only if data changed
+        const hasChanges = JSON.stringify(freshData) !== JSON.stringify(storeData);
+        storeData = freshData;
+        if (hasChanges || !cached) {
+          applyStoreData(false);
         }
-
-        if (storeData.dealer.logo_path) {
-          document.getElementById('landingDealerLogo').src = storeData.dealer.logo_path;
-          document.getElementById('landingDealerLogo').style.display = 'block';
-          document.getElementById('headerDealerLogo').src = storeData.dealer.logo_path;
-          document.getElementById('headerDealerLogo').style.display = 'block';
+        // Remove offline indicator if it was showing
+        if (isOffline) {
+          document.getElementById('storeName').textContent = storeData.dealer.display_name;
+          isOffline = false;
         }
-
-        // Apply settings
-        if (storeData.settings) {
-          if (storeData.settings.landing_video) {
-            document.getElementById('landingVideo').src = storeData.settings.landing_video;
-          }
-          if (storeData.settings.landing_headline) {
-            document.getElementById('ctaText').textContent = storeData.settings.landing_headline;
-          }
-        }
-
-        renderCategories();
-        renderFinishFilter();
-        renderProducts();
+        preCacheImages(freshData);
       } catch (err) {
-        // Try offline cache
-        if ('caches' in window) {
-          const cache = await caches.open('store-data');
-          const cached = await cache.match(`/api/store/${slug}`);
-          if (cached) {
-            storeData = await cached.json();
-            document.getElementById('storeName').textContent = storeData.dealer.display_name + ' (אופליין)';
-            renderCategories();
-            renderFinishFilter();
-            renderProducts();
-            return;
+        // Offline — use cached data
+        if (cached) {
+          if (!storeData) {
+            storeData = cached;
+            applyStoreData(true);
+          } else {
+            document.getElementById('storeName').textContent = storeData.dealer.display_name + ' ⚡ אופליין';
+            isOffline = true;
           }
+        } else {
+          // Try SW cache as last resort
+          if ('caches' in window) {
+            try {
+              const cache = await caches.open('store-data');
+              const swCached = await cache.match(`/api/store/${slug}`);
+              if (swCached) {
+                storeData = await swCached.json();
+                saveToLocalCache(storeData);
+                applyStoreData(true);
+                return;
+              }
+            } catch (e) { /* no SW cache */ }
+          }
+          document.getElementById('loading').innerHTML = '<p class="error-msg">אין חיבור לאינטרנט ואין נתונים שמורים</p>';
         }
-        document.getElementById('loading').innerHTML = '<p class="error-msg">שגיאה בטעינת החנות</p>';
       }
+    }
+
+    // ===== BACKGROUND DATA REFRESH (every 5 min, no page reload) =====
+    function startBackgroundRefresh() {
+      setInterval(async () => {
+        try {
+          const res = await fetch(`/api/store/${slug}`);
+          if (!res.ok) return;
+          const freshData = await res.json();
+          const hasChanges = JSON.stringify(freshData) !== JSON.stringify(storeData);
+          saveToLocalCache(freshData);
+          storeData = freshData;
+          if (hasChanges) {
+            // Re-render current view silently
+            const activeCat = document.querySelector('.cat-btn.active')?.dataset.cat || 'all';
+            renderProducts(activeCat);
+          }
+          if (isOffline) {
+            document.getElementById('storeName').textContent = storeData.dealer.display_name;
+            isOffline = false;
+          }
+          preCacheImages(freshData);
+        } catch (e) {
+          // Still offline, no problem
+        }
+      }, DATA_REFRESH_INTERVAL);
     }
 
     function renderCategories() {
@@ -612,8 +731,8 @@
     // Init cart badge on load
     updateCartBadge();
 
-    // ===== IDLE RESET (30 min) =====
-    const IDLE_TIMEOUT = 30 * 60 * 1000;
+    // ===== IDLE RESET (10 min) =====
+    const IDLE_TIMEOUT = 10 * 60 * 1000;
     let idleTimer = null;
 
     function resetIdleTimer() {
@@ -663,7 +782,24 @@
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 
+    // ===== ONLINE/OFFLINE INDICATOR =====
+    window.addEventListener('online', () => {
+      if (isOffline && storeData) {
+        document.getElementById('storeName').textContent = storeData.dealer.display_name;
+        isOffline = false;
+        // Refresh data immediately when back online
+        loadStore();
+      }
+    });
+    window.addEventListener('offline', () => {
+      if (storeData) {
+        document.getElementById('storeName').textContent = storeData.dealer.display_name + ' ⚡ אופליין';
+        isOffline = true;
+      }
+    });
+
     loadStore();
+    startBackgroundRefresh();
   </script>
 </body>
 </html>
