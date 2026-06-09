@@ -28,9 +28,13 @@
     <div class="tab-content active" id="tab-my-prices">
       <div class="tab-header">
         <h1>ניהול מחירים</h1>
-        <div style="display:flex;gap:0.5rem">
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <div id="syncStatus" class="sync-status" style="display:none">
+            <span class="sync-icon" id="syncIcon">⏳</span>
+            <span class="sync-text" id="syncText"></span>
+          </div>
           <button class="btn btn-secondary" onclick="exportMyPrices()">📥 ייצוא לאקסל</button>
-          <button class="btn btn-primary" onclick="saveAllPrices()">שמור הכל</button>
+          <button class="btn btn-primary" id="saveBtn" onclick="saveAllPrices()">שמור הכל</button>
         </div>
       </div>
       <div class="filter-bar">
@@ -286,11 +290,69 @@
       document.querySelectorAll('.price-input').forEach(inp => {
         if (inp.value) { prices.push({ product_id: inp.dataset.pid, price: parseFloat(inp.value) }); myPrices[inp.dataset.pid] = parseFloat(inp.value); }
       });
+
+      const saveBtn = document.getElementById('saveBtn');
+      const syncStatus = document.getElementById('syncStatus');
+      const syncIcon = document.getElementById('syncIcon');
+      const syncText = document.getElementById('syncText');
+
+      // Phase 1: Saving
+      saveBtn.disabled = true;
+      saveBtn.textContent = '⏳ שומר...';
+      syncStatus.style.display = 'flex';
+      syncIcon.textContent = '⏳';
+      syncText.textContent = 'שומר מחירים...';
+      syncStatus.className = 'sync-status syncing';
+
       try {
         const r = await api('/api/dealer-prices/bulk', { method: 'POST', body: JSON.stringify({ prices }) });
-        if (r && r.error) { alert('שגיאה: ' + r.error); return; }
-        alert('המחירים נשמרו בהצלחה!');
-      } catch (e) { alert('שגיאה בשמירת המחירים'); }
+        if (r && r.error) {
+          syncIcon.textContent = '❌';
+          syncText.textContent = 'שגיאה: ' + r.error;
+          syncStatus.className = 'sync-status sync-error';
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'שמור הכל';
+          return;
+        }
+
+        // Phase 2: Verify on remote store
+        syncIcon.textContent = '🔄';
+        syncText.textContent = 'מאמת מול החנות המרוחקת...';
+
+        await new Promise(res => setTimeout(res, 800));
+
+        const storeData = await fetch(`/api/store/${user.store_slug}`).then(r => r.json());
+        let verified = 0;
+        let mismatched = 0;
+        for (const p of prices) {
+          const storeProd = storeData.products?.find(sp => sp.id === p.product_id);
+          if (storeProd) {
+            const storePrice = storeProd.dealer_price ?? storeProd.base_price;
+            if (Math.abs(storePrice - p.price) < 0.01) verified++;
+            else mismatched++;
+          }
+        }
+
+        // Phase 3: Show result
+        const now = new Date().toLocaleTimeString('he-IL');
+        if (mismatched === 0) {
+          syncIcon.textContent = '✅';
+          syncText.textContent = `${verified} מחירים עודכנו בהצלחה באתר המרוחק • ${now}`;
+          syncStatus.className = 'sync-status sync-ok';
+        } else {
+          syncIcon.textContent = '⚠️';
+          syncText.textContent = `${verified} עודכנו, ${mismatched} לא אומתו • ${now}`;
+          syncStatus.className = 'sync-status sync-warning';
+        }
+
+      } catch (e) {
+        syncIcon.textContent = '❌';
+        syncText.textContent = 'שגיאה בשמירת המחירים';
+        syncStatus.className = 'sync-status sync-error';
+      }
+
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'שמור הכל';
     }
 
     async function exportMyPrices() {
