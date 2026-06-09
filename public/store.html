@@ -763,6 +763,10 @@
     function resetToLanding() {
       // Clear the landing dismiss flag so landing shows again
       try { localStorage.removeItem(LANDING_KEY); } catch(e) {}
+
+      // Clear cached store data so next entry fetches fresh
+      try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(CACHE_TIME_KEY); } catch(e) {}
+
       closeBubble();
       closeComparison();
       closeCart();
@@ -781,7 +785,7 @@
       finBtns.forEach(b => b.classList.remove('active'));
       if (finBtns[0]) finBtns[0].classList.add('active');
 
-      if (storeData) renderProducts();
+      storeData = null;
 
       // Back to landing
       document.getElementById('storeWrapper').style.display = 'none';
@@ -792,6 +796,9 @@
       if (video) { video.currentTime = 0; video.play().catch(() => {}); }
 
       window.scrollTo(0, 0);
+
+      // Pre-fetch fresh data in background so it's ready when user enters
+      loadStore();
     }
 
     ['click', 'touchstart', 'scroll', 'mousemove', 'keydown'].forEach(evt => {
@@ -824,6 +831,11 @@
 
     loadStore();
     startBackgroundRefresh();
+
+    // ===== KEEP RENDER ALIVE (light ping every 14 min) =====
+    setInterval(() => {
+      fetch('/api/categories', { method: 'HEAD' }).catch(() => {});
+    }, 14 * 60 * 1000);
   </script>
 </body>
 </html>
