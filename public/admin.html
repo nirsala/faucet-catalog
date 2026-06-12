@@ -32,7 +32,10 @@
     <div class="tab-content active" id="tab-products">
       <div class="tab-header">
         <h1>ניהול מוצרים</h1>
-        <button class="btn btn-primary" onclick="showAddProduct()">+ מוצר חדש</button>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-primary" onclick="showAddProduct()">+ מוצר חדש</button>
+          <button class="btn btn-secondary" onclick="showBulkImport()">📥 ייבוא מרוכז</button>
+        </div>
       </div>
       <div class="filter-bar">
         <select id="productCategoryFilter" onchange="loadProducts()">
@@ -358,6 +361,163 @@
     }
 
     async function deleteProduct(id) { if (!confirm('למחוק מוצר זה?')) return; await api(`/api/products/${id}`, { method: 'DELETE' }); loadProducts(); }
+
+    // ===== BULK IMPORT =====
+    function showBulkImport() {
+      showModal('📥 ייבוא מרוכז של מוצרים', `
+        <div style="margin-bottom:1rem">
+          <p style="color:var(--text-light);margin-bottom:0.5rem">העלה קובץ CSV עם המוצרים. הפורמט:</p>
+          <code style="display:block;background:var(--bg-dark);padding:0.8rem;border-radius:6px;font-size:0.8rem;direction:ltr;text-align:left;overflow-x:auto;white-space:nowrap">name,description,category,base_price,sku,finish</code>
+          <p style="color:var(--text-light);margin-top:0.5rem;font-size:0.8rem">* category = שם הקטגוריה בדיוק כפי שמופיע במערכת</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+          <button class="btn btn-sm" onclick="downloadImportTemplate()">📄 הורד תבנית CSV</button>
+          <button class="btn btn-sm" onclick="downloadProductsExport()">📤 ייצוא מוצרים קיימים</button>
+        </div>
+        <div class="form-group">
+          <label>בחר קובץ CSV</label>
+          <input type="file" id="importFile" accept=".csv,.txt" onchange="previewImport()">
+        </div>
+        <div class="form-group">
+          <label>מוצרים עם מק"ט קיים:</label>
+          <select id="importMode">
+            <option value="skip">דלג (לא לעדכן)</option>
+            <option value="update">עדכן נתונים</option>
+            <option value="add">הוסף כחדש</option>
+          </select>
+        </div>
+        <div id="importPreview" style="margin:1rem 0"></div>
+        <button class="btn btn-primary" id="importBtn" onclick="executeBulkImport()" disabled>ייבא מוצרים</button>
+      `);
+    }
+
+    function downloadImportTemplate() {
+      const header = 'name,description,category,base_price,sku,finish';
+      const example = 'ברז מטבח דגם A,ברז מטבח איכותי מנירוסטה,ברזי מטבח,450,SKU-001,כרום';
+      const csv = '\\uFEFF' + header + '\\n' + example;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'palyam-import-template.csv'; a.click();
+    }
+
+    function downloadProductsExport() {
+      const header = 'name,description,category,base_price,sku,finish';
+      const rows = products.map(p => {
+        const escape = v => {
+          const s = String(v || '');
+          return s.includes(',') || s.includes('"') || s.includes('\\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        return [escape(p.name), escape(p.description), escape(p.category_name), p.base_price, escape(p.sku), escape(p.finish)].join(',');
+      });
+      const csv = '\\uFEFF' + header + '\\n' + rows.join('\\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'palyam-products-export.csv'; a.click();
+    }
+
+    function parseCSV(text) {
+      const lines = text.split(/\\r?\\n/).filter(l => l.trim());
+      if (lines.length < 2) return [];
+      const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+      const items = [];
+      for (let i = 1; i < lines.length; i++) {
+        const vals = parseCSVLine(lines[i]);
+        if (vals.length === 0 || vals.every(v => !v.trim())) continue;
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h] = (vals[idx] || '').trim(); });
+        items.push(obj);
+      }
+      return items;
+    }
+
+    function parseCSVLine(line) {
+      const result = []; let current = ''; let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+          if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+          else if (ch === '"') { inQuotes = false; }
+          else { current += ch; }
+        } else {
+          if (ch === '"') { inQuotes = true; }
+          else if (ch === ',') { result.push(current); current = ''; }
+          else { current += ch; }
+        }
+      }
+      result.push(current);
+      return result;
+    }
+
+    let pendingImportItems = [];
+
+    function previewImport() {
+      const file = document.getElementById('importFile').files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result;
+        const items = parseCSV(text);
+        pendingImportItems = items;
+
+        if (items.length === 0) {
+          document.getElementById('importPreview').innerHTML = '<p style="color:#f87171">לא נמצאו מוצרים בקובץ</p>';
+          document.getElementById('importBtn').disabled = true;
+          return;
+        }
+
+        const catNames = categories.map(c => c.name.trim().toLowerCase());
+        let html = '<p style="color:var(--text-light);margin-bottom:0.5rem">נמצאו <strong>' + items.length + '</strong> מוצרים:</p>';
+        html += '<div style="max-height:250px;overflow-y:auto"><table class="data-table"><thead><tr><th>#</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>מק"ט</th><th>גימור</th><th>סטטוס</th></tr></thead><tbody>';
+        items.forEach((item, i) => {
+          const catOk = catNames.includes((item.category || '').trim().toLowerCase());
+          html += '<tr' + (!catOk ? ' style="background:rgba(255,60,60,0.1)"' : '') + '>';
+          html += '<td>' + (i + 1) + '</td>';
+          html += '<td>' + (item.name || '-') + '</td>';
+          html += '<td>' + (item.category || '-') + '</td>';
+          html += '<td>₪' + (item.base_price || '0') + '</td>';
+          html += '<td>' + (item.sku || '-') + '</td>';
+          html += '<td>' + (item.finish || '-') + '</td>';
+          html += '<td>' + (catOk ? '✅' : '❌ קטגוריה?') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('importPreview').innerHTML = html;
+        document.getElementById('importBtn').disabled = false;
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
+    async function executeBulkImport() {
+      if (pendingImportItems.length === 0) return;
+      const mode = document.getElementById('importMode').value;
+      const btn = document.getElementById('importBtn');
+      btn.disabled = true; btn.textContent = '⏳ מייבא...';
+
+      try {
+        const result = await api('/api/products/bulk-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: pendingImportItems, mode })
+        });
+
+        let msg = '<h3 style="color:#4ade80;margin-bottom:0.5rem">✅ הייבוא הושלם!</h3>';
+        msg += '<p>סה"כ: ' + result.total + ' שורות</p>';
+        msg += '<p>יובאו: <strong>' + result.imported + '</strong></p>';
+        if (result.updated > 0) msg += '<p>עודכנו: <strong>' + result.updated + '</strong></p>';
+        if (result.skipped > 0) msg += '<p>דולגו: ' + result.skipped + '</p>';
+        if (result.errors && result.errors.length > 0) {
+          msg += '<div style="margin-top:0.5rem;color:#fbbf24"><p>שגיאות:</p><ul>';
+          result.errors.forEach(e => { msg += '<li>שורה ' + e.row + ' (' + e.name + '): ' + e.error + '</li>'; });
+          msg += '</ul></div>';
+        }
+        document.getElementById('importPreview').innerHTML = msg;
+        btn.textContent = '✅ הושלם';
+        loadProducts(); loadFinishes();
+      } catch (e) {
+        document.getElementById('importPreview').innerHTML = '<p style="color:#f87171">שגיאה: ' + e.message + '</p>';
+        btn.disabled = false; btn.textContent = 'ייבא מוצרים';
+      }
+    }
 
     // ===== PRODUCT IMAGES MANAGEMENT =====
     async function manageImages(productId) {

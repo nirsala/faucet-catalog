@@ -181,6 +181,61 @@ app.delete('/api/products/:id', authMiddleware, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
+// Bulk import products
+app.post('/api/products/bulk-import', authMiddleware, adminOnly, express.json({ limit: '10mb' }), (req, res) => {
+  const { products: items, mode } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No products to import' });
+  }
+
+  const cats = all('SELECT * FROM categories');
+  const catMap = {};
+  cats.forEach(c => {
+    catMap[c.name.trim().toLowerCase()] = c.id;
+    catMap[c.id] = c.id;
+  });
+
+  let imported = 0, skipped = 0, updated = 0, errors = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    try {
+      if (!item.name || !item.name.trim()) { skipped++; continue; }
+
+      const catId = catMap[String(item.category || '').trim().toLowerCase()] || catMap[String(item.category_id || '')] || null;
+      if (!catId) {
+        errors.push({ row: i + 1, name: item.name, error: `קטגוריה לא נמצאה: ${item.category || item.category_id}` });
+        skipped++;
+        continue;
+      }
+
+      const sku = (item.sku || '').trim();
+      const existing = sku ? get('SELECT id FROM products WHERE sku = ? AND is_active = 1', [sku]) : null;
+
+      if (existing && mode === 'update') {
+        // Update existing product
+        run('UPDATE products SET name = ?, description = ?, category_id = ?, base_price = ?, finish = ? WHERE id = ?',
+          [item.name.trim(), (item.description || '').trim(), catId, parseFloat(item.base_price) || 0, (item.finish || '').trim() || null, existing.id]);
+        updated++;
+      } else if (existing && mode === 'skip') {
+        skipped++;
+      } else {
+        // Insert new product
+        const id = uuidv4();
+        const maxOrder = get('SELECT MAX(display_order) as m FROM products WHERE category_id = ?', [catId])?.m || 0;
+        run('INSERT INTO products (id, name, description, category_id, base_price, image_path, sku, finish, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, item.name.trim(), (item.description || '').trim(), catId, parseFloat(item.base_price) || 0, null, sku || null, (item.finish || '').trim() || null, maxOrder + 1]);
+        imported++;
+      }
+    } catch (e) {
+      errors.push({ row: i + 1, name: item.name, error: e.message });
+      skipped++;
+    }
+  }
+
+  res.json({ imported, updated, skipped, errors, total: items.length });
+});
+
 // Product images
 app.get('/api/products/:id/images', (req, res) => {
   const product = get('SELECT image_path FROM products WHERE id = ?', [req.params.id]);
